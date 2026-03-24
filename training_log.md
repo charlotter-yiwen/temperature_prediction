@@ -2981,3 +2981,38 @@
 - Gen-test temps: `data/thermal_analysis_output_count_sweep_gen/temps_count_sweep.npy`
 - Results: `data/set_fno_results_v3/`
 - Model: `set_fno_model_v3.pth`
+
+---
+## Set-FNO Data Pipeline & Train/Test Split Notes
+
+### Data Pipeline Comparison
+
+| Model | Data Flow |
+|---|---|
+| POD-RBF / cGAN-CNN | JSON files → `process_json_to_grid.py` (scipy.griddata interpolation) → `.npy` → Model |
+| Set-FNO | `thermal_prediction_error.py --count-sweep` (SOR solver direct 100×100 grid output) → `.npy` → Model |
+
+**Set-FNO does NOT use `process_json_to_grid.py`**. The simulation script (`thermal_prediction_error.py`) directly outputs the temperature field as a 100×100 grid from the SOR solver, saved as `params_count_sweep.npy` and `temps_count_sweep.npy`. No additional preprocessing or interpolation is needed.
+
+### Train/Test Split Strategy (inside `set_fno_thermal.py`)
+
+All splitting is done automatically inside `load_count_sweep_data()` using `sklearn.model_selection.train_test_split`:
+
+| Split | Ratio | Method | Seed |
+|---|---|---|---|
+| Test set | 20% of total | Stratified by component count | 42 |
+| Validation set | 10% of training set | Stratified by component count | 42 |
+| Training set | Remaining ~72% | — | — |
+
+**Stratified sampling** ensures each component count (1, 2, 3, 4, 5) is proportionally represented in every split.
+
+For the v3 run (500 samples, 100 per component count):
+
+| Split | Approx. Samples | Purpose |
+|---|---|---|
+| Training | ~360 | Model weight updates |
+| Validation | ~40 | Early stopping criterion |
+| Test (in-distribution) | 100 | Evaluate on 1–5 components |
+| Generalization test | 60 (separate file) | Evaluate on unseen 6–8 components |
+
+The **generalization test set** (6–8 components, 20 each) is loaded from a completely separate `.npy` file via `--gen-test-params` / `--gen-test-temps` and never participates in training or validation.
