@@ -1,0 +1,15 @@
+# Model checkpoints
+*.pth
+
+# Generated data (large binary / simulation output)
+data/
+thermal_analysis_output/
+thermal_analysis_output_sets/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.vscode/

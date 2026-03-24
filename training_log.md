@@ -2763,3 +2763,221 @@
 - Train temps:  `C:\Users\mkale\Desktop\hou_capita\temperature\thermal_analysis_output_sets\samples_160\training data\temps_training.npy`
 - Test params:  `C:\Users\mkale\Desktop\hou_capita\temperature\thermal_analysis_output_sets\samples_160\test data\params_testing.npy`
 - Test temps:   `C:\Users\mkale\Desktop\hou_capita\temperature\thermal_analysis_output_sets\samples_160\test data\temps_testing.npy`
+
+---
+## Set-FNO Run v1 (FAILED) — 2026-03-23 23:51
+
+### Model
+| Param | Value |
+|---|---|
+| Architecture | Set Transformer + FNO 2D |
+| d_model | 128 |
+| num_heads | 4 |
+| SAB layers | 2 |
+| FNO channels | 32 |
+| FNO modes | 12 |
+| FNO layers | 4 |
+| Total params | 4,425,473 |
+| Device | cuda |
+
+### Hyperparameters
+| Param | Value |
+|---|---|
+| Epochs | 2000 (early stopped at 420) |
+| Batch size | 8 |
+| Learning rate | 5e-4 |
+| Weight decay | 1e-5 |
+| Early stopping | Yes (patience=300) |
+
+### Dataset (Count Sweep, 1–5 components)
+| Item | Value |
+|---|---|
+| Total samples | 200 (5 groups × 40) |
+| Train samples | 144 |
+| Val samples | 16 |
+| Test samples | 40 |
+| Param dim | (N, 5, 3) — [x, y, power] per component, NaN→0 padding |
+| Grid size | 100×100 |
+
+### Test Results (1–5 components, seen during training)
+| Metric | Value |
+|---|---|
+| Average R² | 0.5083 |
+| Max R² | 0.9961 |
+| Min R² | -1.5516 |
+
+### Generalization Results (6/7/8 components, unseen)
+| Component Count | Samples | Avg R² |
+|---|---|---|
+| 6 | 20 | -126.20 |
+| 7 | 20 | -181.02 |
+| 8 | 20 | -216.82 |
+| **Overall** | **60** | **-174.68** |
+
+### Failure Analysis
+1. **Training instability**: Loss crashed from 0.006 → 1.01 at epoch 400, early stopping triggered at epoch 420
+2. **Model too large for data**: 4.4M parameters vs only 144 training samples — severe overfitting risk
+3. **Learning rate too high**: 5e-4 caused gradient explosion mid-training
+
+### File Paths
+- Results: `data/set_fno_results/`
+
+---
+## Set-FNO Run v2 — 2026-03-24 00:00
+
+### Model
+| Param | Value |
+|---|---|
+| Architecture | Set Transformer + FNO 2D |
+| d_model | 64 |
+| num_heads | 4 |
+| SAB layers | 1 |
+| FNO channels | 16 |
+| FNO modes | 8 |
+| FNO layers | 2 |
+| Device | cuda |
+
+### Hyperparameters
+| Param | Value |
+|---|---|
+| Epochs | 3000 (ran all) |
+| Batch size | 4 |
+| Learning rate | 1e-4 |
+| Weight decay | 1e-4 |
+| Early stopping | Yes (patience=500, not triggered) |
+
+### Dataset (Count Sweep, 1–5 components)
+| Item | Value |
+|---|---|
+| Total samples | 200 (5 groups × 40) |
+| Train samples | 144 |
+| Val samples | 16 |
+| Test samples | 40 |
+| Param dim | (N, 5, 3) — [x, y, power] per component, NaN→0 padding |
+| Grid size | 100×100 |
+
+### Test Results (1–5 components, seen during training)
+| Metric | Value |
+|---|---|
+| Average R² | **0.9727** |
+| Max R² | 0.9961 |
+| Min R² | 0.8803 |
+| All 40 samples | R² > 0.88 |
+
+### Per-sample R² (Test)
+
+| Sample | R² | Sample | R² | Sample | R² | Sample | R² |
+|---|---|---|---|---|---|---|---|
+| 01 | 0.9887 | 11 | 0.9896 | 21 | 0.9926 | 31 | 0.9929 |
+| 02 | 0.9926 | 12 | 0.9775 | 22 | 0.9858 | 32 | 0.8803 |
+| 03 | 0.9915 | 13 | 0.9935 | 23 | 0.9926 | 33 | 0.9961 |
+| 04 | 0.9817 | 14 | 0.9847 | 24 | 0.9406 | 34 | 0.9957 |
+| 05 | 0.9638 | 15 | 0.9858 | 25 | 0.9960 | 35 | 0.9613 |
+| 06 | 0.9662 | 16 | 0.9954 | 26 | 0.9855 | 36 | 0.9203 |
+| 07 | 0.9740 | 17 | 0.9893 | 27 | 0.9939 | 37 | 0.9618 |
+| 08 | 0.9279 | 18 | 0.9905 | 28 | 0.9941 | 38 | 0.9378 |
+| 09 | 0.9692 | 19 | 0.9597 | 29 | 0.9835 | 39 | 0.9874 |
+| 10 | 0.9798 | 20 | 0.9896 | 30 | 0.9029 | 40 | 0.9169 |
+
+### Generalization Results (6/7/8 components, unseen) — FAILED
+| Component Count | Samples | Avg R² |
+|---|---|---|
+| 6 | 20 | -107.56 |
+| 7 | 20 | -219.37 |
+| 8 | 20 | -215.68 |
+| **Overall** | **60** | **-180.87** |
+
+### Failure Analysis — Generalization
+1. **Distribution shift**: Training data has 1–5 components (total power 2.2–13.7W); test data has 6–8 components (total power ~16–23W). The FNO decoder learned temperature magnitude patterns specific to the training power range.
+2. **Temperature scale mismatch**: StandardScaler was fitted on 1–5 component temperature fields (25–76°C). Inverse transform for 6–8 component inputs (which should produce 80–100+°C) outputs wildly wrong values.
+3. **Zero-padding semantics**: Absent components are zero-padded (x=0, y=0, p=0). When the model sees 6+ components all with non-zero values, the input structure differs from what was seen during training where many slots were always zero.
+4. **Set Transformer limitation**: While theoretically invariant to set size, the PMA pooling with a single learned seed vector may compress the extra component signals in ways not generalizable.
+
+### Conclusion
+- **Within-distribution (1–5 components): Excellent (R²=0.97)**
+- **Out-of-distribution (6–8 components): Total failure**
+- **Next steps**: Train on 1–7 components, test on 8; or use physics-informed normalization (divide temp field by total power)
+
+### File Paths
+- Train/Test params: `data/thermal_analysis_output_count_sweep/params_count_sweep.npy`
+- Train/Test temps: `data/thermal_analysis_output_count_sweep/temps_count_sweep.npy`
+- Gen-test params: `data/thermal_analysis_output_count_sweep_gen/params_count_sweep.npy`
+- Gen-test temps: `data/thermal_analysis_output_count_sweep_gen/temps_count_sweep.npy`
+- Results v1: `data/set_fno_results/`
+- Results v2: `data/set_fno_results_v2/`
+
+---
+## Set-FNO Run v3 (Physics Norm) — 2026-03-24
+
+### Key Changes from v2
+1. **Physics-informed normalization**: `T_norm = (T - 25°C) / P_total` — thermal impedance map (°C/W), making different component counts comparable
+2. **2.5× more training data**: 500 samples (5 groups × 100) vs 200 (5 groups × 40)
+
+### Model
+| Param | Value |
+|---|---|
+| Architecture | Set Transformer + FNO 2D |
+| d_model | 64 |
+| num_heads | 4 |
+| SAB layers | 1 |
+| FNO channels | 16 |
+| FNO modes | 8 |
+| FNO layers | 2 |
+| Device | cuda |
+
+### Hyperparameters
+| Param | Value |
+|---|---|
+| Epochs | 3000 (early stopped at 1901) |
+| Batch size | 8 |
+| Learning rate | 1e-4 |
+| Weight decay | 1e-4 |
+| Early stopping | Yes (patience=500) |
+| Physics norm | **Yes** — `T_norm = (T - T_amb) / P_total` |
+| T_ambient | 25.0 °C |
+
+### Dataset (Count Sweep, 1–5 components)
+| Item | Value |
+|---|---|
+| Total samples | **500** (5 groups × 100) |
+| Train samples | 360 |
+| Val samples | 40 |
+| Test samples | 100 |
+| Param dim | (N, 5, 3) — [x, y, power] per component, NaN→0 padding |
+| Grid size | 100×100 |
+
+### Test Results (1–5 components, seen during training)
+| Metric | Value |
+|---|---|
+| Average R² | **0.9910** |
+| Min R² | 0.9389 |
+| Max R² | 0.9998 |
+| All 100 samples | R² > 0.93 |
+
+### Generalization Results (6/7/8 components, unseen) — **SUCCESS**
+| Component Count | Samples | Avg R² |
+|---|---|---|
+| 6 | 20 | **0.9128** |
+| 7 | 20 | **0.9291** |
+| 8 | 20 | **0.8420** |
+| **Overall** | **60** | **0.8946** |
+
+### Improvement vs v2
+| Metric | v2 (no physics norm, 200 samples) | v3 (physics norm, 500 samples) |
+|---|---|---|
+| Test R² (1–5) | 0.9727 | **0.9910** |
+| Gen R² (6–8) | -180.87 | **0.8946** |
+
+### Analysis
+- **Physics normalization was the key breakthrough**: By dividing `(T - T_ambient)` by total power, the model learns thermal impedance patterns that naturally scale with any number of components. The thermal impedance field has a consistent range (~0–5 °C/W) regardless of component count.
+- **More data helped**: 500 vs 200 samples improved in-distribution R² from 0.9727 to 0.9910.
+- **8-component prediction is hardest**: R²=0.842 for 8 components vs 0.913/0.929 for 6/7. This makes sense as 8 components create more complex interaction patterns the model hasn't seen.
+- **Early stopping at epoch 1901** (patience=500) indicates good convergence with no overfitting.
+
+### File Paths
+- Train/Test params: `data/thermal_analysis_output_count_sweep/params_count_sweep.npy` (500 samples)
+- Train/Test temps: `data/thermal_analysis_output_count_sweep/temps_count_sweep.npy`
+- Gen-test params: `data/thermal_analysis_output_count_sweep_gen/params_count_sweep.npy` (60 samples)
+- Gen-test temps: `data/thermal_analysis_output_count_sweep_gen/temps_count_sweep.npy`
+- Results: `data/set_fno_results_v3/`
+- Model: `set_fno_model_v3.pth`
