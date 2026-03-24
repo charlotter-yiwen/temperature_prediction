@@ -1,0 +1,33 @@
+{
+  "n_runs": 2,
+  "r2_mean": 0.9088379045327505,
+  "r2_std": 0.0012573599815368652,
+  "runs": [
+    {
+      "run": 1,
+      "split_seed": 42,
+      "r2_avg": 0.9100952645142873,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 500,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/large_lr_big_batch\\run_01\\set_fno_model.pth",
+      "result_dir": "hp_search/large_lr_big_batch\\run_01",
+      "generalization": null
+    },
+    {
+      "run": 2,
+      "split_seed": 43,
+      "r2_avg": 0.9075805445512136,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 500,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/large_lr_big_batch\\run_02\\set_fno_model.pth",
+      "result_dir": "hp_search/large_lr_big_batch\\run_02",
+      "generalization": null
+    }
+  ]
+}

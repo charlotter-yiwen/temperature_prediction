@@ -1,0 +1,130 @@
+[
+  {
+    "name": "slow_learning",
+    "r2_mean": 0.952414558827877,
+    "r2_std": 0.00754133313894273,
+    "params": {
+      "d_model": 128,
+      "num_heads": 4,
+      "n_sab": 2,
+      "fno_ch": 32,
+      "fno_modes": 12,
+      "n_fno": 4,
+      "lr": 0.0001,
+      "batch_size": 8,
+      "dropout": 0.0
+    }
+  },
+  {
+    "name": "small_lr_small_batch",
+    "r2_mean": 0.9457594896356265,
+    "r2_std": 0.006827972829341888,
+    "params": {
+      "d_model": 128,
+      "num_heads": 4,
+      "n_sab": 2,
+      "fno_ch": 32,
+      "fno_modes": 12,
+      "n_fno": 4,
+      "lr": 0.0001,
+      "batch_size": 4,
+      "dropout": 0.0
+    }
+  },
+  {
+    "name": "small_model",
+    "r2_mean": 0.9374916091561317,
+    "r2_std": 0.0021468107899029754,
+    "params": {
+      "d_model": 64,
+      "num_heads": 4,
+      "n_sab": 1,
+      "fno_ch": 16,
+      "fno_modes": 8,
+      "n_fno": 2,
+      "lr": 0.0005,
+      "batch_size": 8,
+      "dropout": 0.1
+    }
+  },
+  {
+    "name": "baseline",
+    "r2_mean": 0.9298042406638463,
+    "r2_std": 0.003433623909950223,
+    "params": {
+      "d_model": 128,
+      "num_heads": 4,
+      "n_sab": 2,
+      "fno_ch": 32,
+      "fno_modes": 12,
+      "n_fno": 4,
+      "lr": 0.0005,
+      "batch_size": 8,
+      "dropout": 0.0
+    }
+  },
+  {
+    "name": "more_fno_modes",
+    "r2_mean": 0.926857271293799,
+    "r2_std": 0.007358583311239897,
+    "params": {
+      "d_model": 128,
+      "num_heads": 4,
+      "n_sab": 2,
+      "fno_ch": 32,
+      "fno_modes": 20,
+      "n_fno": 4,
+      "lr": 0.0005,
+      "batch_size": 8,
+      "dropout": 0.0
+    }
+  },
+  {
+    "name": "large_lr_big_batch",
+    "r2_mean": 0.9088379045327505,
+    "r2_std": 0.0012573599815368652,
+    "params": {
+      "d_model": 128,
+      "num_heads": 4,
+      "n_sab": 2,
+      "fno_ch": 32,
+      "fno_modes": 12,
+      "n_fno": 4,
+      "lr": 0.001,
+      "batch_size": 16,
+      "dropout": 0.0
+    }
+  },
+  {
+    "name": "dropout_reg",
+    "r2_mean": 0.8651246925195059,
+    "r2_std": 0.002331573764483119,
+    "params": {
+      "d_model": 128,
+      "num_heads": 4,
+      "n_sab": 2,
+      "fno_ch": 32,
+      "fno_modes": 12,
+      "n_fno": 4,
+      "lr": 0.0005,
+      "batch_size": 8,
+      "dropout": 0.2
+    }
+  },
+  {
+    "name": "big_model",
+    "r2_mean": -0.8204987774292628,
+    "r2_std": 0.03134338160355887,
+    "params": {
+      "d_model": 256,
+      "num_heads": 8,
+      "n_sab": 3,
+      "fno_ch": 64,
+      "fno_modes": 16,
+      "n_fno": 6,
+      "lr": 0.0005,
+      "batch_size": 8,
+      "dropout": 0.0
+    }
+  }
+]

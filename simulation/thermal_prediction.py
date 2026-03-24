@@ -530,11 +530,14 @@ def generate_and_save_variants(components_mm, pcb_dimensions_mm=(100.0,100.0), n
             show_plot=False
         )
 
-        # build filename from shifts
+        # build filename from absolute component positions (center of each component)
         flat = []
-        for dx, dy in shifts:
-            flat.append(str(int(dx)))
-            flat.append(str(int(dy)))
+        for comp in new_comps:
+            # Use center of component as absolute position
+            cx = (comp['x_min'] + comp['x_max']) / 2
+            cy = (comp['y_min'] + comp['y_max']) / 2
+            flat.append(str(int(cx)))
+            flat.append(str(int(cy)))
         name = ','.join(flat)
         json_path = os.path.join(output_folder, f"{name}.json")
         with open(json_path, 'w', encoding='utf-8') as f:
