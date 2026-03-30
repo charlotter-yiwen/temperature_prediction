@@ -17,7 +17,8 @@ DATA_DIR = r"c:\Users\jkong\Documents\power brain_new\yiwen version\temperature_
 OUTPUT_DIR = r"c:\Users\jkong\Documents\power brain_new\yiwen version\temperature_prediction\training_data"
 GRID_SIZE = 100  # Grid size is 100x100 based on JSON data (10000 points)
 BOARD_SIZE = 100.0  # mm, PCB board size
-DEFAULT_POWER = 2.0  # Default power per component in Watts
+# 组件功率分布：U1=2.5W, U2=2.2W, U3=3.0W, U4=2.8W, U5=3.2W
+POWERS = [2.5, 2.2, 3.0, 2.8, 3.2]
 
 
 def parse_filename_get_positions(filename):
@@ -48,8 +49,8 @@ def parse_filename_get_positions(filename):
         if i + 1 < len(coords_str):
             x = int(coords_str[i])
             y = int(coords_str[i + 1])
-            # Assume default power for each component
-            positions.append([x, y, DEFAULT_POWER])
+            # Use actual power for each component
+            positions.append([x, y, POWERS[i // 2]])
 
     return n_components, positions
 
