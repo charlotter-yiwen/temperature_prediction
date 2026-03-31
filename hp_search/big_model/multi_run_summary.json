@@ -1,0 +1,33 @@
+{
+  "n_runs": 2,
+  "r2_mean": -0.8204987774292628,
+  "r2_std": 0.03134338160355887,
+  "runs": [
+    {
+      "run": 1,
+      "split_seed": 42,
+      "r2_avg": -0.7891553958257039,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 500,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/big_model\\run_01\\set_fno_model.pth",
+      "result_dir": "hp_search/big_model\\run_01",
+      "generalization": null
+    },
+    {
+      "run": 2,
+      "split_seed": 43,
+      "r2_avg": -0.8518421590328217,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 500,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/big_model\\run_02\\set_fno_model.pth",
+      "result_dir": "hp_search/big_model\\run_02",
+      "generalization": null
+    }
+  ]
+}

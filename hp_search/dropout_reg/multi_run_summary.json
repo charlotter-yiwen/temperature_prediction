@@ -1,0 +1,33 @@
+{
+  "n_runs": 2,
+  "r2_mean": 0.8651246925195059,
+  "r2_std": 0.002331573764483119,
+  "runs": [
+    {
+      "run": 1,
+      "split_seed": 42,
+      "r2_avg": 0.867456266283989,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 500,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/dropout_reg\\run_01\\set_fno_model.pth",
+      "result_dir": "hp_search/dropout_reg\\run_01",
+      "generalization": null
+    },
+    {
+      "run": 2,
+      "split_seed": 43,
+      "r2_avg": 0.8627931187550227,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 500,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/dropout_reg\\run_02\\set_fno_model.pth",
+      "result_dir": "hp_search/dropout_reg\\run_02",
+      "generalization": null
+    }
+  ]
+}

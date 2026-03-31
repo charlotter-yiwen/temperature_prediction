@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-03-24_14-52-15",
+  "baseline_hparams": {
+    "architecture": {
+      "d_model": 128,
+      "num_heads": 4,
+      "n_sab": 2,
+      "fno_ch": 32,
+      "fno_modes": 12,
+      "n_fno": 4,
+      "dropout": 0.0
+    },
+    "training": {
+      "epochs": 2000,
+      "batch_size": 8,
+      "lr": 0.0005,
+      "weight_decay": 1e-05,
+      "val_ratio": 0.1,
+      "log_every": 50
+    },
+    "data": {
+      "n_components": 4,
+      "d_per_comp": 3,
+      "xi": 200,
+      "yi": 200
+    }
+  },
+  "run_args": {
+    "train_params": null,
+    "train_temps": null,
+    "test_params": null,
+    "test_temps": null,
+    "count_sweep_params": "c:\\Users\\jkong\\Documents\\power brain_new\\yiwen version\\temperature_prediction\\training_data\\params_count_sweep.npy",
+    "count_sweep_temps": "c:\\Users\\jkong\\Documents\\power brain_new\\yiwen version\\temperature_prediction\\training_data\\temps_count_sweep.npy",
+    "test_ratio": 0.2,
+    "gen_test_params": null,
+    "gen_test_temps": null,
+    "n_components": 5,
+    "d_per_comp": 3,
+    "physics_norm": true,
+    "t_ambient": 25.0,
+    "d_model": 64,
+    "num_heads": 4,
+    "n_sab": 1,
+    "fno_ch": 16,
+    "fno_modes": 8,
+    "n_fno": 2,
+    "dropout": 0.1,
+    "epochs": 500,
+    "batch_size": 8,
+    "lr": 0.0005,
+    "weight_decay": 1e-05,
+    "val_ratio": 0.1,
+    "log_every": 100,
+    "early_stopping": false,
+    "patience": 200,
+    "min_delta": 0.0,
+    "n_runs": 2,
+    "seed_base": 42,
+    "out_dir": "hp_search/small_model",
+    "model_out": "set_fno_model.pth",
+    "n_vis": 6
+  },
+  "model_params": {
+    "total": 832993,
+    "by_module": [
+      {
+        "module": "encoder",
+        "params": 108608
+      },
+      {
+        "module": "decoder",
+        "params": 724385
+      },
+      {
+        "module": "total",
+        "params": 832993
+      }
+    ]
+  }
+}
