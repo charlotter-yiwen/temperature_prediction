@@ -223,6 +223,7 @@ def main():
     parser.add_argument("--min-delta",    type=float, default=0.0)
     parser.add_argument("--out-dir",   default="results_plan_a_physics")
     parser.add_argument("--model-out", default="plan_a_physics_model.pth")
+    parser.add_argument("--resume-from", default=None, help="Path to Phase1 checkpoint to resume from")
     parser.add_argument("--n-vis",     type=int, default=6)
 
     args = parser.parse_args()
@@ -270,6 +271,23 @@ def main():
     model = PlanAPlusPhysics(base_model).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model parameters: {n_params:,} (~{n_params/1e6:.1f}M)", flush=True)
+
+    # Resume from Phase1 checkpoint if provided
+    if args.resume_from:
+        ckpt = torch.load(args.resume_from, map_location=device, weights_only=False)
+        sd = ckpt["state_dict"]
+        # Phase1 has base. prefix, filter out grid buffers
+        has_base_prefix = any(k.startswith("base.") for k in sd.keys())
+        if has_base_prefix:
+            new_sd = {}
+            for k, v in sd.items():
+                if k.startswith("base."):
+                    new_sd[k[5:]] = v
+                elif k not in ("grid_x", "grid_y"):
+                    new_sd[k] = v
+            sd = new_sd
+        model.load_state_dict(sd, strict=False)
+        print(f"[Resumed from] {args.resume_from}", flush=True)
 
     # 保存配置
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
