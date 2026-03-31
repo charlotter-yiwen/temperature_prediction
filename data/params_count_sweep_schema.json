@@ -1,0 +1,20 @@
+{
+  "description": "Per-sample parameter vector is component center XY in mm, padded with NaN for missing components.",
+  "max_components": 5,
+  "feature_order": [
+    "x1",
+    "y1",
+    "x2",
+    "y2",
+    "x3",
+    "y3",
+    "x4",
+    "y4",
+    "x5",
+    "y5"
+  ],
+  "shape": [
+    300,
+    10
+  ]
+}
