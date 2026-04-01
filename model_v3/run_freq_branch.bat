@@ -1,0 +1,3 @@
+@echo off
+cd /d "C:\Users\jkong\Documents\power brain_new\yiwen version\temperature_prediction\model_v3"
+C:\anaconda3\envs\magnet2\python.exe ..\model_v3_variants\frequency_branch\model_freq_branch.py --count-sweep-params "..\training_data\params_count_sweep.npy" --count-sweep-temps "..\training_data\temps_count_sweep.npy" --physics-norm --lambda-pde 0.001 --lambda-bc 0.0005 --epochs 10000 --batch-size 32 --lr 5e-05 --weight-decay 1e-05 --val-ratio 0.1 --early-stopping --patience 500 --out-dir "./results_freq_branch" --model-out "freq_branch_phase2.pth" --resume-from "./results_plan_a_physics/plan_a_physics_phase1.pth" --n-vis 6 --high-freq-modes 12 --log-every 50

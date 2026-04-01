@@ -1,0 +1,7 @@
+{
+  "r2_mean": -175.3606198946635,
+  "train_info": {
+    "best_val": Infinity,
+    "stopped_epoch": 3
+  }
+}

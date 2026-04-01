@@ -1,13 +1,18 @@
 """
-train_plan_a_physics_v2.py
-==========================
-Plan A + 物理约束，用简化的方式实现：
-把物理 loss 集成到模型内部，避免在训练循环中传参数。
+set_fno_thermal_freq.py
+========================
+Variant ①: 频域高频支路 (Frequency-domain high-frequency branch)
+在 FNODecoder 的 up2 之后、FNO blocks 之前，增加并行的频域高频分支：
+  FFT → 高频滤波 → 1×1 conv → iFFT → concat → FNO blocks → out
 
-所有物理 loss 计算在模型的 compute_physics_loss() 方法内进行。
+核心思路：标准 FNO 的 SpectralConv 只保留 modes×modes 低频分量，
+高频信息（尖锐热斑、边界梯度）可能丢失。高频支路专门提取这部分信息。
 """
 
-import os, sys, json, argparse
+import os
+import sys
+import json
+import argparse
 from datetime import datetime
 import numpy as np
 import torch
@@ -17,10 +22,11 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 TP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, TP_DIR)
+sys.path.insert(0, os.path.dirname(TP_DIR))
 
 from models.set_fno_thermal import (
-    SetFNOModel,
+    SetTransformerEncoder,
+    SpectralConv2d,
     load_count_sweep_data,
     compute_r2 as compute_r2_base,
     plot_loss_curves,
@@ -32,11 +38,139 @@ from models.set_fno_thermal import (
 )
 
 
+# ── 频域高频支路 ──────────────────────────────────────────────────────────────
+
+class FrequencyBranch(nn.Module):
+    """
+    频域高频支路：并行于 FNO spectral conv 的高频信息提取分支。
+
+    流程：
+      x (B, ch, H, W)
+        → FFT (rfft2) → (B, ch, H, W//2+1) complex
+        → 高频滤波 + 1×1 conv → (B, ch, H, W//2+1) complex
+        → iFFT → (B, ch, H, W)
+        → 与主路径 concat → (B, 2*ch, H, W)
+    """
+    def __init__(self, ch: int, high_freq_modes: int = 12):
+        super().__init__()
+        self.ch = ch
+        self.high_freq_modes = high_freq_modes
+        # 在频域做 1×1 卷积（实部和虚部分开）
+        self.freq_conv = nn.Conv2d(ch, ch, 1)
+        # 高频滤波掩码（半谱模式外的区域置零）
+        # rfft2 输出: (H, W//2+1)，前半部分是低频，后半部分是高频
+        # 我们保留 modes 及以上的频率（modes 以下视为低频滤掉）
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, C, H, W = x.shape
+        half = W // 2 + 1
+
+        # FFT → 复数谱
+        xft = torch.fft.rfft2(x)  # (B, C, H, half)
+
+        # 高频掩码：保留高频部分（modes 及以上），低频置零
+        m = self.high_freq_modes
+        mask = torch.zeros_like(xft)
+        # 中心区域（低频）清零，两端（高频）保留
+        mask[:, :, :m, :] = 1.0
+        mask[:, :, -m:, :] = 1.0
+        mask[:, :, m:-m, :m] = 1.0
+        mask[:, :, m:-m, -m:] = 1.0
+
+        # 高频分量 × 可学习权重
+        xft_high = xft * mask
+        xft_high = torch.complex(
+            self.freq_conv(xft_high.real),
+            self.freq_conv(xft_high.imag)
+        )
+
+        # iFFT
+        out = torch.fft.irfft2(xft_high, s=(H, W))
+        return out
+
+
+class FNOBlock2d(nn.Module):
+    def __init__(self, ch: int, modes1: int, modes2: int):
+        super().__init__()
+        self.spec   = SpectralConv2d(ch, ch, modes1, modes2)
+        self.bypass = nn.Conv2d(ch, ch, 1)
+        self.norm   = nn.InstanceNorm2d(ch, affine=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.gelu(self.norm(self.spec(x) + self.bypass(x)))
+
+
+class FNODecoderFreq(nn.Module):
+    """
+    FNODecoder + 频域高频支路。
+    高频支路与主路径独立（不放大 FNO 块输入），结果 concat。
+    主路径: up2 → FNO blocks (ch) → out_conv
+    高频支路: up2 → FFT → 高频滤波 + 逐通道加权 → iFFT → concat → out_conv
+    """
+    def __init__(self, d_cond: int = 128, ch: int = 32,
+                 modes: int = 12, n_layers: int = 4, out_size: int = 100,
+                 high_freq_modes: int = 12):
+        super().__init__()
+        self.out_size  = out_size
+        self.init_size = out_size // 4  # 25 when out_size=100
+        self.ch = ch
+
+        self.cond_proj = nn.Linear(d_cond, ch * self.init_size * self.init_size)
+        self.up1 = nn.Sequential(
+            nn.ConvTranspose2d(ch, ch, kernel_size=4, stride=2, padding=1), nn.GELU())
+        self.up2 = nn.Sequential(
+            nn.ConvTranspose2d(ch, ch, kernel_size=4, stride=2, padding=1), nn.GELU())
+
+        # ── 频域高频支路（逐通道独立加权）─────────────────────
+        self.freq_branch = FrequencyBranch(ch, high_freq_modes=high_freq_modes)
+
+        self.fno_blocks = nn.ModuleList(
+            [FNOBlock2d(ch, modes, modes) for _ in range(n_layers)])  # 保持 ch 不变
+        # concat 后通道: ch(主) + ch(高频) = 2ch
+        self.out_conv = nn.Conv2d(ch * 2, 1, 1)
+
+    def forward(self, cond: torch.Tensor) -> torch.Tensor:
+        B = cond.size(0)
+        h = self.cond_proj(cond).view(B, -1, self.init_size, self.init_size)
+        h = self.up1(h)
+        h_main = self.up2(h)  # (B, ch, 100, 100)
+
+        # ── 高频支路（不改变主路径）─────────────────────────────
+        h_high = self.freq_branch(h_main)  # (B, ch, 100, 100)
+
+        # 主路径 FNO blocks
+        h_feat = h_main
+        for blk in self.fno_blocks:
+            h_feat = blk(h_feat)
+
+        # concat: (B, 2*ch, 100, 100)
+        h_combined = torch.cat([h_feat, h_high], dim=1)
+        return self.out_conv(h_combined)  # (B, 1, 100, 100)
+
+
+class SetFNOModelFreq(nn.Module):
+    """
+    完整模型：SetTransformer encoder + FNODecoder(含高频支路)
+    """
+    def __init__(self, d_in: int = 3, d_model: int = 256, num_heads: int = 8,
+                 n_sab: int = 4, fno_ch: int = 64, fno_modes: int = 24,
+                 n_fno: int = 6, dropout: float = 0.0, out_size: int = 100,
+                 high_freq_modes: int = 12):
+        super().__init__()
+        self.encoder = SetTransformerEncoder(d_in, d_model, num_heads, n_sab, dropout)
+        self.decoder = FNODecoderFreq(d_model, fno_ch, fno_modes, n_fno,
+                                       out_size=out_size, high_freq_modes=high_freq_modes)
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        cond = self.encoder(X)
+        return self.decoder(cond)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PlanAPlusPhysics 包装器（复用原版 physics loss）
+# ══════════════════════════════════════════════════════════════════════════════
+
 class PlanAPlusPhysics(nn.Module):
-    """
-    包装 Plan A 模型，增加 compute_physics_loss_on_grid 方法。
-    在 forward 之后直接计算 BC + PDE loss，无需传额外参数。
-    """
     def __init__(self, base_model, k_fr4=0.35, h_conv=30.0, dx_norm=1.0/99.0):
         super().__init__()
         self.base = base_model
@@ -48,23 +182,18 @@ class PlanAPlusPhysics(nn.Module):
         xs = torch.linspace(0, 1, grid, dtype=torch.float32)
         ys = torch.linspace(0, 1, grid, dtype=torch.float32)
         yy, xx = torch.meshgrid(ys, xs, indexing='ij')
-        self.register_buffer('grid_x', xx)  # (100, 100)
+        self.register_buffer('grid_x', xx)
         self.register_buffer('grid_y', yy)
 
-        # BC 系数
         k_dx2 = k_fr4 / (dx_norm ** 2)
         h_dx  = h_conv / dx_norm
-        self.c_adj = k_dx2 / (k_dx2 + h_dx)  # ≈ 0.536
-        print(f"[PlanA+Physics] c_adj={self.c_adj:.4f}, k_dx2={k_dx2:.2f}, h_dx={h_dx:.2f}", flush=True)
+        self.c_adj = k_dx2 / (k_dx2 + h_dx)
 
-        # ── 预注册常用 tensors（避免每 batch 重新创建）──────────
-        # Laplace 核
         lap_kernel = torch.tensor([[0., 1., 0.],
                                    [1., -4., 1.],
                                    [0., 1., 0.]], dtype=torch.float32)
         self.register_buffer('lap_kernel', lap_kernel)
 
-        # interior mask（只计算一次）
         m = torch.zeros(1, 1, grid, grid, dtype=torch.float32)
         m[:, :, 1:-1, 1:-1] = 1.0
         self.register_buffer('interior_mask', m)
@@ -73,17 +202,11 @@ class PlanAPlusPhysics(nn.Module):
         return self.base(x)
 
     def compute_physics_loss(self, xb, eps=1e-6):
-        """
-        xb: (B, n_comp, 3) 归一化参数
-        返回 (L_pde, L_bc)
-        """
         B, n_comp, _ = xb.shape
         device = xb.device
 
-        # 前向传播
-        T_pred = self.base(xb).squeeze(1)  # (B, 100, 100) normalized
+        T_pred = self.base(xb).squeeze(1)
 
-        # ── BC Loss ─────────────────────────────────────────────
         c = self.c_adj
         bc_top    = ((T_pred[:, 0, :]    - c * T_pred[:, 1, :]   ) ** 2).mean()
         bc_bottom = ((T_pred[:, -1, :]  - c * T_pred[:, -2, :]  ) ** 2).mean()
@@ -91,28 +214,19 @@ class PlanAPlusPhysics(nn.Module):
         bc_right  = ((T_pred[:, :, -1]   - c * T_pred[:, :, -2]  ) ** 2).mean()
         L_bc = bc_top + bc_bottom + bc_left + bc_right
 
-        # ── 热源掩码 ───────────────────────────────────────────
-        hs_x = xb[:, :, 0:1]   # (B, n_comp, 1)
+        hs_x = xb[:, :, 0:1]
         hs_y = xb[:, :, 1:2]
-
-        # 使用预注册的 grid buffer（避免 .to(device) 每 batch）
-        # gx/gy: (100,100) → (1,100,100) broadcast with (B,n_comp,1,1) → (B,n_comp,100,100)
-        gx = self.grid_x.unsqueeze(0)      # (1, 100, 100)
-        gy = self.grid_y.unsqueeze(0)      # (1, 100, 100)
-
-        # 合并两步 unsqueeze/expand，减少中间 tensor 创建
-        dx = hs_x.unsqueeze(-1) - gx.unsqueeze(1)   # (B, n_comp, 100, 100)
+        gx = self.grid_x.unsqueeze(0)
+        gy = self.grid_y.unsqueeze(0)
+        dx = hs_x.unsqueeze(-1) - gx.unsqueeze(1)
         dy = hs_y.unsqueeze(-1) - gy.unsqueeze(1)
         dist_sq = dx * dx + dy * dy
-        min_dist, _ = dist_sq.min(dim=1)              # (B, 100, 100)
-        is_source = (min_dist < 0.06).float()         # (B, 100, 100)
+        min_dist, _ = dist_sq.min(dim=1)
+        is_source = (min_dist < 0.06).float()
 
-        # ── PDE Loss ──────────────────────────────────────────
-        lap_kernel = self.lap_kernel.view(1, 1, 3, 3)  # 已是 buffer，直接用
-        lap = F.conv2d(T_pred.unsqueeze(1), lap_kernel, padding=0, stride=1)  # (B,1,98,98)
-
-        # 使用预注册的 interior_mask（已在 buffer 中，slice 不创建新 tensor）
-        interior_mask = self.interior_mask[:, :, 1:-1, 1:-1]  # (1,1,98,98) view
+        lap_kernel = self.lap_kernel.view(1, 1, 3, 3)
+        lap = F.conv2d(T_pred.unsqueeze(1), lap_kernel, padding=0, stride=1)
+        interior_mask = self.interior_mask[:, :, 1:-1, 1:-1]
         non_source = interior_mask * (1.0 - is_source[:, 1:-1, 1:-1])
         L_pde = ((lap ** 2) * non_source).sum() / (non_source.sum() + eps)
 
@@ -219,20 +333,22 @@ def main():
     parser.add_argument("--fno-modes", type=int,   default=24)
     parser.add_argument("--n-fno",     type=int,   default=6)
     parser.add_argument("--dropout",   type=float, default=0.0)
-    parser.add_argument("--lambda-pde", type=float, default=0.0)
-    parser.add_argument("--lambda-bc",  type=float, default=0.0)
-    parser.add_argument("--epochs",       type=int,   default=2000)
+    parser.add_argument("--high-freq-modes", type=int, default=12,
+                        help="高频支路保留的频谱半径")
+    parser.add_argument("--lambda-pde", type=float, default=0.001)
+    parser.add_argument("--lambda-bc",  type=float, default=0.0005)
+    parser.add_argument("--epochs",       type=int,   default=10000)
     parser.add_argument("--batch-size",   type=int,   default=32)
-    parser.add_argument("--lr",          type=float, default=1e-4)
+    parser.add_argument("--lr",          type=float, default=5e-5)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--val-ratio",    type=float, default=0.1)
     parser.add_argument("--log-every",   type=int,   default=50)
     parser.add_argument("--early-stopping", action="store_true")
-    parser.add_argument("--patience",     type=int,   default=200)
+    parser.add_argument("--patience",     type=int,   default=500)
     parser.add_argument("--min-delta",    type=float, default=0.0)
-    parser.add_argument("--out-dir",   default="results_plan_a_physics")
-    parser.add_argument("--model-out", default="plan_a_physics_model.pth")
-    parser.add_argument("--resume-from", default=None, help="Path to Phase1 checkpoint to resume from")
+    parser.add_argument("--out-dir",   default="results_freq_branch")
+    parser.add_argument("--model-out", default="freq_branch_phase2.pth")
+    parser.add_argument("--resume-from", default=None)
     parser.add_argument("--n-vis",     type=int, default=6)
 
     args = parser.parse_args()
@@ -241,10 +357,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}", flush=True)
     print(f"\n{'='*60}", flush=True)
-    print(f"  Plan A + Corrected Physics Loss v2", flush=True)
+    print(f"  Variant 1: Frequency-Domain High-Frequency Branch", flush=True)
     print(f"{'='*60}", flush=True)
     print(f"Architecture: d_model={args.d_model}, heads={args.num_heads}, "
           f"n_sab={args.n_sab}, fno_ch={args.fno_ch}, fno_modes={args.fno_modes}, n_fno={args.n_fno}", flush=True)
+    print(f"Frequency branch: high_freq_modes={args.high_freq_modes}", flush=True)
     print(f"Physics: lambda_pde={args.lambda_pde}, lambda_bc={args.lambda_bc}", flush=True)
     print(f"Training: epochs={args.epochs}, batch_size={args.batch_size}, lr={args.lr}", flush=True)
 
@@ -270,22 +387,22 @@ def main():
         val_ds = ThermalDatasetWithPower(p_val, t_val_s, tp_val)
         val_ld = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
 
-    base_model = SetFNOModel(
+    base_model = SetFNOModelFreq(
         d_in=args.d_per_comp, d_model=args.d_model,
         num_heads=args.num_heads, n_sab=args.n_sab,
         fno_ch=args.fno_ch, fno_modes=args.fno_modes,
         n_fno=args.n_fno, dropout=args.dropout, out_size=grid_size,
+        high_freq_modes=args.high_freq_modes,
     ).to(device)
 
     model = PlanAPlusPhysics(base_model).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model parameters: {n_params:,} (~{n_params/1e6:.1f}M)", flush=True)
 
-    # Resume from Phase1 checkpoint if provided
+    # Resume from checkpoint
     if args.resume_from:
         ckpt = torch.load(args.resume_from, map_location=device, weights_only=False)
         sd = ckpt["state_dict"]
-        # Phase1 has base. prefix, filter out grid buffers
         has_base_prefix = any(k.startswith("base.") for k in sd.keys())
         if has_base_prefix:
             new_sd = {}
@@ -298,7 +415,6 @@ def main():
         model.load_state_dict(sd, strict=False)
         print(f"[Resumed from] {args.resume_from}", flush=True)
 
-    # 保存配置
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     payload = {"timestamp": ts, "run_args": vars(args), "model_params": int(n_params)}
     for suffix in [f"_{ts}.json", "_latest.json"]:
@@ -315,11 +431,10 @@ def main():
         patience=args.patience, min_delta=args.min_delta, out_dir=args.out_dir,
     )
 
-    # 保存
     ckpt = {
         "state_dict":      model.state_dict(),
         "scaler_y_mean":  scaler_y.mean_,
-        "scaler_y_scale": scaler_y.scale_,
+        "scaler_y_scale":  scaler_y.scale_,
         "args":            vars(args),
         "train_info":      train_info,
         "grid_size":       grid_size,

@@ -1,0 +1,33 @@
+{
+  "n_runs": 2,
+  "r2_mean": 0.9747587030132612,
+  "r2_std": 0.00019104331731795154,
+  "runs": [
+    {
+      "run": 1,
+      "split_seed": 42,
+      "r2_avg": 0.9749497463305791,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 2000,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/method3_bs8_no_physics\\run_01\\set_fno_model.pth",
+      "result_dir": "hp_search/method3_bs8_no_physics\\run_01",
+      "generalization": null
+    },
+    {
+      "run": 2,
+      "split_seed": 43,
+      "r2_avg": 0.9745676596959432,
+      "train_info": {
+        "best_val": null,
+        "stopped_epoch": 2000,
+        "early_stopping": false
+      },
+      "model_path": "hp_search/method3_bs8_no_physics\\run_02\\set_fno_model.pth",
+      "result_dir": "hp_search/method3_bs8_no_physics\\run_02",
+      "generalization": null
+    }
+  ]
+}
