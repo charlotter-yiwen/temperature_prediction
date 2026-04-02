@@ -980,6 +980,187 @@ def load_components_from_json(path):
     return data
 
 
+# =============================================================================
+# 10. Random-power count-sweep dataset (2.5-6W per component, 1-5 components)
+# =============================================================================
+
+PCB_SIZE_MM = 100.0
+GRID_SIZE = 100
+AMBIENT_TEMP = 25.0
+COMP_SIZE_MM = 8.0
+MIN_POWER = 2.5
+MAX_POWER = 6.0
+
+
+def random_position():
+    margin = COMP_SIZE_MM / 2 + 1
+    x = random.uniform(margin, PCB_SIZE_MM - margin)
+    y = random.uniform(margin, PCB_SIZE_MM - margin)
+    return x, y
+
+
+def generate_random_layout(n_comp):
+    """Generate n_comp non-overlapping components with random power 2.5-6W each."""
+    for _ in range(2000):
+        # Random power per component
+        powers = np.random.uniform(MIN_POWER, MAX_POWER, n_comp)
+        powers = powers / powers.sum() * np.random.uniform(2.5 * n_comp, 6.0 * n_comp)
+        powers = np.clip(powers, MIN_POWER, MAX_POWER)
+
+        positions = []
+        comps = []
+        ok = True
+        for i in range(n_comp):
+            cx, cy = random_position()
+            x_min, x_max = cx - COMP_SIZE_MM / 2, cx + COMP_SIZE_MM / 2
+            y_min, y_max = cy - COMP_SIZE_MM / 2, cy + COMP_SIZE_MM / 2
+            rect = (x_min, x_max, y_min, y_max)
+            for (px0, px1, py0, py1) in positions:
+                if rects_overlap(rect, (px0, px1, py0, py1)):
+                    ok = False; break
+            if not ok: break
+            positions.append(rect)
+            comps.append({
+                'name': f'C{i}',
+                'x_min': x_min, 'x_max': x_max,
+                'y_min': y_min, 'y_max': y_max,
+                'power': float(powers[i])
+            })
+        if ok:
+            return comps
+    raise RuntimeError(f'Failed to generate {n_comp} non-overlapping components')
+
+
+def build_pos_filename(comps):
+    """cx1_cy1_cx2_cy2_... from component centers."""
+    return '_'.join(
+        f"{int(round((c['x_min']+c['x_max'])/2))}_{int(round((c['y_min']+c['y_max'])/2))}"
+        for c in comps
+    )
+
+
+def generate_random_power_sweep(
+        output_dir,
+        n_counts=(1, 2, 3, 4, 5),
+        n_per_count=120,
+        grid_size=100,
+        seed=42,
+        save_every=10):
+    """Generate count-sweep dataset with random positions AND random powers.
+
+    Output:
+        output_dir/params_count_sweep.npy   (N, 5, 3)  [x,y,power] per component
+        output_dir/temps_count_sweep.npy    (N, grid^2)  flattened temp
+        output_dir/samples/                   PNG every N samples
+        output_dir/samples_summary.csv       one row per sample
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+
+    os.makedirs(output_dir, exist_ok=True)
+    samples_dir = os.path.join(output_dir, 'samples')
+    os.makedirs(samples_dir, exist_ok=True)
+
+    total = len(n_counts) * n_per_count
+    params = np.full((total, 5, 3), np.nan, dtype=np.float32)
+    temps  = np.zeros((total, grid_size * grid_size), dtype=np.float32)
+
+    csv_f = open(os.path.join(output_dir, 'samples_summary.csv'), 'w')
+    csv_f.write('index,n_comp,total_power_W,T_max_C,'
+                'x1,y1,p1,x2,y2,p2,x3,y3,p3,x4,y4,p4,x5,y5,p5\n')
+
+    idx = 0
+    for n_comp in n_counts:
+        print(f'\n=== {n_comp} components x {n_per_count} samples ===')
+        for i in range(n_per_count):
+            comps = generate_random_layout(n_comp)
+            total_power = sum(c['power'] for c in comps)
+
+            T, _, _, _ = pcb_2d_thermal_simulation_sor_optimized(
+                grid_size=grid_size,
+                ambient_temp=AMBIENT_TEMP,
+                max_iterations=100000,
+                tolerance=1e-12,
+                omega=1.98,
+                components_mm=comps,
+                pcb_dimensions_mm=(PCB_SIZE_MM, PCB_SIZE_MM)
+            )
+            T_flat = T.flatten().astype(np.float32)
+
+            for j, c in enumerate(comps):
+                cx = (c['x_min'] + c['x_max']) / 2
+                cy = (c['y_min'] + c['y_max']) / 2
+                params[idx, j] = [cx, cy, c['power']]
+            temps[idx] = T_flat
+
+            p_str = ', '.join(f"{c['power']:.1f}W" for c in comps)
+            print(f"  [{idx:03d}] {n_comp}C total={total_power:.1f}W [{p_str}]  T_max={T_flat.max():.1f}C")
+
+            if (i + 1) % save_every == 0 or i == 0 or i == n_per_count - 1:
+                pos_tag = build_pos_filename(comps)
+                png_name = f"sample_{idx:04d}_{n_comp}C_{int(total_power)}W_{pos_tag}.png"
+                png_path = os.path.join(samples_dir, png_name)
+
+                fig, ax = plt.subplots(figsize=(5, 4))
+                vmin = max(AMBIENT_TEMP, T.min() - 3)
+                vmax = T.max() + 3
+                ax.imshow(T, cmap='hot', origin='lower',
+                          vmin=vmin, vmax=vmax,
+                          extent=[0, PCB_SIZE_MM, 0, PCB_SIZE_MM])
+                for c in comps:
+                    rect = plt.Rectangle(
+                        (c['x_min'], c['y_min']),
+                        c['x_max'] - c['x_min'],
+                        c['y_max'] - c['y_min'],
+                        linewidth=1.2, edgecolor='cyan', facecolor='none')
+                    ax.add_patch(rect)
+                    cx = (c['x_min'] + c['x_max']) / 2
+                    cy = (c['y_min'] + c['y_max']) / 2
+                    ax.text(cx, cy, f"{c['power']:.0f}W",
+                            ha='center', va='center', color='white',
+                            fontsize=7, fontweight='bold')
+                ax.set_xlabel('X (mm)')
+                ax.set_ylabel('Y (mm)')
+                ax.set_title(f'{n_comp}C P={total_power:.0f}W Tmax={T.max():.0f}C')
+                plt.colorbar(ax.imshow(T, cmap='hot', origin='lower',
+                              vmin=vmin, vmax=vmax,
+                              extent=[0, PCB_SIZE_MM, 0, PCB_SIZE_MM]),
+                             ax=ax, label='Temp (C)')
+                plt.tight_layout()
+                plt.savefig(png_path, dpi=120)
+                plt.close(fig)
+                print(f"         PNG -> {png_name}")
+
+            row = [idx, n_comp, round(total_power, 2), round(float(T_flat.max()), 2)]
+            for j in range(5):
+                if j < n_comp:
+                    row.extend([round(float(params[idx, j, 0]), 1),
+                                round(float(params[idx, j, 1]), 1),
+                                round(float(params[idx, j, 2]), 1)])
+                else:
+                    row.extend(['', '', ''])
+            csv_f.write(','.join(str(x) for x in row) + '\n')
+            csv_f.flush()
+            idx += 1
+
+    csv_f.close()
+
+    np.save(os.path.join(output_dir, 'params_count_sweep.npy'), params)
+    np.save(os.path.join(output_dir, 'temps_count_sweep.npy'), temps)
+
+    print(f'\nSaved: params_count_sweep.npy  shape={params.shape}')
+    print(f'Saved: temps_count_sweep.npy  shape={temps.shape}')
+    print('\n=== Verification ===')
+    for n_comp in n_counts:
+        mask = np.array([np.sum(~np.isnan(p[:, 0])) == n_comp for p in params])
+        count = mask.sum()
+        sub_p = params[mask]
+        powers = [np.nansum(p[:, 2]) for p in sub_p]
+        print(f'  {n_comp}C: {count} samples, power range [{min(powers):.1f}, {max(powers):.1f}] W')
+    print('\nDone!')
+    return idx
+
+
 def main():
     parser = argparse.ArgumentParser(description='Run PCB thermal analysis')
     parser.add_argument('--components', '-c', help='Path to components JSON file', default=None)
