@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-04-02_22-03-39",
+  "args": {
+    "data_dir": "C:\\Users\\jkong\\Documents\\power brain_new\\yiwen version\\training_data_30W_test",
+    "out_dir": "./results_phase1",
+    "epochs": 500,
+    "batch_size": 8,
+    "lr": 0.0001,
+    "weight_decay": 1e-05,
+    "d_hidden": 256,
+    "n_layers": 4,
+    "n_freqs": 64,
+    "dropout": 0.0,
+    "lambda_pde": 0.0,
+    "lambda_bc": 0.0,
+    "patience": 50,
+    "max_components": 9,
+    "log_every": 50
+  },
+  "model_params": 260769,
+  "n_train": 480,
+  "n_val": 60,
+  "n_test": 60
+}
