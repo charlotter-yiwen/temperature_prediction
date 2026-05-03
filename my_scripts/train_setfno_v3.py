@@ -849,12 +849,19 @@ def train(args):
         print(f"Power-scale augmented: {len(raw_tr_p)} -> {len(tr_p)} samples "
               f"(x{args.power_aug_copies+1}, scale [{args.power_aug_min:.1f},{args.power_aug_max:.1f}])")
 
-    p_total_ref = float(
-        np.nan_to_num(tr_p, nan=0.0)[:, :, 2].sum(axis=1).max())
-    print(f"p_total_ref (train max total power): {p_total_ref:.2f} W")
+    # 使用增强前的原始训练集最大总功率/单组件功率作为归一化参考值
+    # 注意：不能从增强后的 tr_p 重新计算！否则 p_total_ref / max_power_ref 会被虚高
+    # （如 13.7W→34.2W），导致测试时 6/7/8 组件的特征被"低功率化"，严重破坏泛化性能。
+    p_total_ref = raw_p_total_ref
+    raw_valid_powers = np.nan_to_num(raw_tr_p, nan=0.0)[:, :, 2]
+    raw_valid_powers = raw_valid_powers[raw_valid_powers > 0]
+    raw_max_power_ref = float(raw_valid_powers.max()) if len(raw_valid_powers) else 1.0
+    print(f"p_total_ref (raw train max total power): {p_total_ref:.2f} W")
+    print(f"max_power_ref (raw train max single power): {raw_max_power_ref:.2f} W")
 
     ds_tr  = ThermalDatasetV3(tr_p, tr_t,
-                              p_total_ref=p_total_ref)
+                              p_total_ref=p_total_ref,
+                              max_power_ref=raw_max_power_ref)
     ds_val = ThermalDatasetV3(params_raw[idx_val], temps_raw[idx_val],
                               max_power_ref=ds_tr.max_power_ref,
                               p_total_ref=ds_tr.p_total_ref,
