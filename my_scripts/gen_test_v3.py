@@ -13,10 +13,14 @@ TP_DIR   = os.path.dirname(os.path.dirname(__file__))
 GEN_DIR  = os.path.join(TP_DIR, "data", "generation_dataset")
 sys.path.insert(0, TP_DIR)
 
-# ── 导入 V3 模型和帮助函数 ──────────────────────────────────────────────────
+# ── 导入 V3 模型和帮助函数（2ch 和 3ch 均支持，自动检测）─────────────────────
 from my_scripts.train_setfno_v3 import (
-    SetFNOv3, ThermalDatasetV3, denorm_and_restore_T,
+    SetFNOv3 as SetFNOv3_2ch, ThermalDatasetV3, denorm_and_restore_T,
     GRID, BOARD_MM, T_AMB, MAX_COMP_REF
+)
+from my_scripts.train_setfno_v3_3ch import (
+    SetFNOv3 as SetFNOv3_3ch, ThermalDatasetV3 as ThermalDatasetV3_3ch,
+    make_heatmap as make_heatmap_3ch
 )
 
 # ── 功率配置（与生成数据时一致）──────────────────────────────────────────────
@@ -68,9 +72,12 @@ def load_gen_samples(n_comp, powers, gen_dir):
     return params_raw, temps_raw
 
 
-def evaluate_group(model, device, norm_info, params_raw, temps_raw, label):
+def evaluate_group(model, device, norm_info, params_raw, temps_raw, label,
+                   dataset_cls=None):
     # 用检查点的 norm_info 构建 dataset（保证归一化一致）
-    ds = ThermalDatasetV3(
+    if dataset_cls is None:
+        dataset_cls = ThermalDatasetV3
+    ds = dataset_cls(
         params_raw, temps_raw,
         max_power_ref=norm_info["max_power_ref"],
         p_total_ref=norm_info["p_total_ref"],
@@ -131,7 +138,14 @@ def main():
 
     print(f"norm_info: {norm_info}")
 
-    model = SetFNOv3(
+    # 自动检测是 2ch 还是 3ch 模型
+    spatial_in_ch = ckpt["model"]["spatial_embed.0.weight"].shape[1]
+    is_3ch = (spatial_in_ch == 5)
+    print(f"Model type: {'3-channel' if is_3ch else '2-channel'} (spatial_embed input={spatial_in_ch}ch)")
+    ModelCls   = SetFNOv3_3ch   if is_3ch else SetFNOv3_2ch
+    DatasetCls = ThermalDatasetV3_3ch if is_3ch else ThermalDatasetV3
+
+    model = ModelCls(
         d_model   = args_ckpt.get("d_model",    256),
         num_heads = args_ckpt.get("num_heads",   8),
         n_sab     = args_ckpt.get("n_sab",       4),
@@ -156,7 +170,8 @@ def main():
         if params_raw is None:
             print(f"\n{label}: no data found in {GEN_DIR}")
             continue
-        r2 = evaluate_group(model, device, norm_info, params_raw, temps_raw, label)
+        r2 = evaluate_group(model, device, norm_info, params_raw, temps_raw, label,
+                           dataset_cls=DatasetCls)
         summary[label] = r2
 
     print(f"\n{'='*60}")

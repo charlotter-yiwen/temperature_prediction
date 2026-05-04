@@ -547,72 +547,6 @@ def power_scale_augment(params_raw, temps_raw, n_copies, scale_min, scale_max,
     return np.concatenate(aug_p_list, axis=0), np.concatenate(aug_t_list, axis=0)
 
 
-def parse_power_aug_bins(bins_text):
-    """
-    解析定向功率增强配置："min:max:copies,min:max:copies"。
-    例如："1.10:1.25:2,1.25:1.40:2,1.40:1.60:2,2.05:2.35:2"
-    """
-    bins = []
-    if not bins_text:
-        return bins
-    for item in bins_text.split(','):
-        item = item.strip()
-        if not item:
-            continue
-        parts = item.split(':')
-        if len(parts) != 3:
-            raise ValueError(f"Invalid --power-aug-bins item: {item!r}; expected min:max:copies")
-        scale_min, scale_max, copies = float(parts[0]), float(parts[1]), int(parts[2])
-        if copies < 0 or scale_min <= 0 or scale_max < scale_min:
-            raise ValueError(f"Invalid --power-aug-bins item: {item!r}")
-        bins.append((scale_min, scale_max, copies))
-    return bins
-
-
-def targeted_power_scale_augment(params_raw, temps_raw, bins, t_amb=T_AMB,
-                                 seed=42, include_original=True):
-    """
-    定向功率缩放增强：按多个功率 scale 区间分别采样。
-    用于显式覆盖 6/7/8 组件中功率区间，以及 9 组件高功率区间。
-    """
-    if not bins and not include_original:
-        raise ValueError('targeted_power_scale_augment: bins cannot be empty when include_original=False')
-
-    rng = np.random.default_rng(seed)
-    aug_p_list = [params_raw] if include_original else []
-    aug_t_list = [temps_raw] if include_original else []
-    for scale_min, scale_max, copies in bins:
-        for _ in range(copies):
-            alpha = rng.uniform(scale_min, scale_max, size=(len(params_raw),)).astype(np.float32)
-            new_p = params_raw.copy()
-            new_p[:, :, 2] *= alpha[:, None]
-            new_t = alpha[:, None, None] * (temps_raw - t_amb) + t_amb
-            aug_p_list.append(new_p)
-            aug_t_list.append(new_t)
-    return np.concatenate(aug_p_list, axis=0), np.concatenate(aug_t_list, axis=0)
-
-
-def data_loss_with_power_weight(theta_pred_sc, theta_sc, total_p, p_total_ref,
-                                enabled=False,
-                                mid_min=1.10, mid_max=1.60, mid_weight=2.0,
-                                high_min=2.00, high_max=2.35, high_weight=1.5):
-    """
-    对每个样本按总功率区间加权的 data loss。
-    目标：提高 6/7/8 对应 scale 区间权重，同时保留 9 组件高功率区间。
-    """
-    if not enabled:
-        return F.mse_loss(theta_pred_sc, theta_sc)
-
-    per_sample = (theta_pred_sc - theta_sc).pow(2).mean(dim=(1, 2, 3))
-    scale = total_p / max(float(p_total_ref), 1e-6)
-    weights = torch.ones_like(scale)
-    weights = torch.where((scale >= mid_min) & (scale <= mid_max),
-                          weights * mid_weight, weights)
-    weights = torch.where((scale >= high_min) & (scale <= high_max),
-                          weights * high_weight, weights)
-    return (per_sample * weights).mean()
-
-
 def build_model(args, device):
     return SetFNOv3(
         d_model=args.d_model, num_heads=args.num_heads, n_sab=args.n_sab,
@@ -647,10 +581,7 @@ def run_training_phase(model, dl_tr, dl_val, ds_tr, device, norm_info, out_dir,
                        epochs, lr, weight_decay,
                        lambda_bc, lambda_pde,
                        early_stopping, patience, min_delta,
-                       log_every, phase_name, ckpt_args,
-                       power_loss_weighting=False,
-                       mid_power_min=1.10, mid_power_max=1.60, mid_power_weight=2.0,
-                       high_power_min=2.00, high_power_max=2.35, high_power_weight=1.5):
+                       log_every, phase_name, ckpt_args):
     os.makedirs(out_dir, exist_ok=True)
 
     trainable_params = [p for p in model.parameters() if p.requires_grad]
@@ -680,15 +611,7 @@ def run_training_phase(model, dl_tr, dl_val, ds_tr, device, norm_info, out_dir,
             optimizer.zero_grad()
             theta_pred_sc = model(params_7d, hmaps)
 
-            loss_data = data_loss_with_power_weight(
-                theta_pred_sc, theta_sc, total_p, norm_info['p_total_ref'],
-                enabled=power_loss_weighting,
-                mid_min=mid_power_min,
-                mid_max=mid_power_max,
-                mid_weight=mid_power_weight,
-                high_min=high_power_min,
-                high_max=high_power_max,
-                high_weight=high_power_weight)
+            loss_data = F.mse_loss(theta_pred_sc, theta_sc)
             theta_pred_raw = (theta_pred_sc * ds_tr.theta_std + ds_tr.theta_mean)
             L_bc, L_pde = physics_loss(
                 theta_pred_raw, hmaps,
@@ -849,41 +772,21 @@ def train(args):
             log_every=args.log_every,
             phase_name='phase1',
             ckpt_args=vars(args),
-            power_loss_weighting=args.power_loss_weighting,
-            mid_power_min=args.mid_power_min,
-            mid_power_max=args.mid_power_max,
-            mid_power_weight=args.mid_power_weight,
-            high_power_min=args.high_power_min,
-            high_power_max=args.high_power_max,
-            high_power_weight=args.high_power_weight,
         )
 
         ckpt_phase1 = torch.load(phase1_result['best_path'], map_location=device)
         model.load_state_dict(ckpt_phase1['model'])
         freeze_backbone_for_phase2(model)
 
-        phase2_bins = parse_power_aug_bins(args.phase2_power_aug_bins)
-        if args.targeted_power_aug or phase2_bins:
-            if not phase2_bins:
-                phase2_bins = [(args.phase2_power_aug_min, args.phase2_power_aug_max,
-                                args.phase2_power_aug_copies)]
-            ft_p, ft_t = targeted_power_scale_augment(
-                raw_tr_p, raw_tr_t,
-                bins=phase2_bins,
-                include_original=False,
-            )
-            print(f"Phase2 targeted-power finetune set: {len(ft_p)} samples "
-                  f"(bins={phase2_bins})")
-        else:
-            ft_p, ft_t = power_scale_augment(
-                raw_tr_p, raw_tr_t,
-                n_copies=args.phase2_power_aug_copies,
-                scale_min=args.phase2_power_aug_min,
-                scale_max=args.phase2_power_aug_max,
-                include_original=False,
-            )
-            print(f"Phase2 high-power finetune set: {len(ft_p)} samples "
-                  f"(copies={args.phase2_power_aug_copies}, scale [{args.phase2_power_aug_min:.1f},{args.phase2_power_aug_max:.1f}])")
+        ft_p, ft_t = power_scale_augment(
+            raw_tr_p, raw_tr_t,
+            n_copies=args.phase2_power_aug_copies,
+            scale_min=args.phase2_power_aug_min,
+            scale_max=args.phase2_power_aug_max,
+            include_original=False,
+        )
+        print(f"Phase2 high-power finetune set: {len(ft_p)} samples "
+              f"(copies={args.phase2_power_aug_copies}, scale [{args.phase2_power_aug_min:.1f},{args.phase2_power_aug_max:.1f}])")
 
         ds_tr_phase2 = ThermalDatasetV3(
             ft_p, ft_t,
@@ -907,13 +810,6 @@ def train(args):
             log_every=args.log_every,
             phase_name='phase2',
             ckpt_args=vars(args),
-            power_loss_weighting=args.power_loss_weighting,
-            mid_power_min=args.mid_power_min,
-            mid_power_max=args.mid_power_max,
-            mid_power_weight=args.mid_power_weight,
-            high_power_min=args.high_power_min,
-            high_power_max=args.high_power_max,
-            high_power_weight=args.high_power_weight,
         )
 
         best_ckpt = torch.load(phase2_result['best_path'], map_location=device)
@@ -943,19 +839,7 @@ def train(args):
         return
 
     tr_p, tr_t = raw_tr_p, raw_tr_t
-    power_aug_bins = parse_power_aug_bins(args.power_aug_bins)
-    if args.targeted_power_aug or power_aug_bins:
-        if not power_aug_bins:
-            power_aug_bins = [(1.10, 1.25, 2), (1.25, 1.40, 2),
-                              (1.40, 1.60, 2), (2.05, 2.35, 2)]
-        tr_p, tr_t = targeted_power_scale_augment(
-            tr_p, tr_t,
-            bins=power_aug_bins,
-            include_original=True,
-        )
-        print(f"Targeted power-scale augmented: {len(raw_tr_p)} -> {len(tr_p)} samples "
-              f"(bins={power_aug_bins})")
-    elif getattr(args, 'power_aug_copies', 0) > 0:
+    if getattr(args, 'power_aug_copies', 0) > 0:
         tr_p, tr_t = power_scale_augment(
             tr_p, tr_t,
             n_copies=args.power_aug_copies,
@@ -1020,13 +904,6 @@ def train(args):
         log_every=args.log_every,
         phase_name='train',
         ckpt_args=vars(args),
-        power_loss_weighting=args.power_loss_weighting,
-        mid_power_min=args.mid_power_min,
-        mid_power_max=args.mid_power_max,
-        mid_power_weight=args.mid_power_weight,
-        high_power_min=args.high_power_min,
-        high_power_max=args.high_power_max,
-        high_power_weight=args.high_power_weight,
     )
 
     best_ckpt = torch.load(phase_result['best_path'], map_location=device)
@@ -1305,24 +1182,6 @@ def parse_args():
                    help='功率缩放系数下界')
     p.add_argument('--power-aug-max',    type=float, default=2.5,
                    help='功率缩放系数上界')
-    p.add_argument('--targeted-power-aug', action='store_true',
-                   help='启用定向功率增强，重点覆盖6/7/8中功率和9组件高功率区间')
-    p.add_argument('--power-aug-bins', type=str, default='',
-                   help='定向功率增强区间，格式 min:max:copies,min:max:copies；为空时使用推荐默认bins')
-    p.add_argument('--power-loss-weighting', action='store_true',
-                   help='按总功率scale对data loss加权，提高6/7/8区间权重并保留9组件高功率')
-    p.add_argument('--mid-power-min',    type=float, default=1.10,
-                   help='中功率loss加权scale下界（约6/7/8组件）')
-    p.add_argument('--mid-power-max',    type=float, default=1.60,
-                   help='中功率loss加权scale上界（约6/7/8组件）')
-    p.add_argument('--mid-power-weight', type=float, default=2.0,
-                   help='中功率loss权重')
-    p.add_argument('--high-power-min',    type=float, default=2.00,
-                   help='高功率loss加权scale下界（约9组件）')
-    p.add_argument('--high-power-max',    type=float, default=2.35,
-                   help='高功率loss加权scale上界（约9组件）')
-    p.add_argument('--high-power-weight', type=float, default=1.5,
-                   help='高功率loss权重')
     # 两阶段训练
     p.add_argument('--two-phase',         action='store_true',
                    help='两阶段训练：Phase1 原始数据；Phase2 冻结主干后高功率微调')
@@ -1338,8 +1197,6 @@ def parse_args():
                    help='Phase2 高倍增强缩放下界')
     p.add_argument('--phase2-power-aug-max',    type=float, default=2.5,
                    help='Phase2 高倍增强缩放上界')
-    p.add_argument('--phase2-power-aug-bins', type=str, default='',
-                   help='Phase2 定向功率增强区间；为空时沿用phase2 min/max/copies')
     return p.parse_args()
 
 

@@ -1,0 +1,1472 @@
+"""
+train_setfno_v3_3ch.py
+======================
+
+SetFNO V3 revised version.
+
+Main changes:
+  1. Heat Source Map changed from 2 channels to 3 channels:
+       ch0 = H_power = Σ P_k*Gauss(d_k) / p_total_ref
+       ch1 = H_shape = Σ P_k*Gauss(d_k) / P_total
+       ch2 = P_scale = P_total / p_total_ref
+
+     This allows the model to see:
+       - local power intensity
+       - normalized heat-source shape
+       - global total power scale
+
+  2. Spatial input becomes 5 channels:
+       3 heatmap channels + x_grid + y_grid
+
+  3. Physics source mask uses ch1, the normalized heat-source shape channel.
+
+  4. p_total_ref and max_power_ref are fixed using the original training data,
+     not the augmented data.
+
+  5. Power augmentation is made milder by default.
+"""
+
+import os
+import argparse
+import json
+import shutil
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Constants
+# ──────────────────────────────────────────────────────────────────────────────
+
+GRID          = 100
+BOARD_MM      = 100.0
+T_AMB         = 25.0
+MAX_COMP_REF  = 9
+SIGMA_MM      = 6.0
+
+K_FR4         = 0.35
+H_CONV        = 30.0
+DX_M          = BOARD_MM / 1000.0 / GRID
+C_ADJ         = K_FR4 / (K_FR4 + H_CONV * DX_M)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Heatmap and pairwise features
+# ──────────────────────────────────────────────────────────────────────────────
+
+def make_heatmap(params_np: np.ndarray,
+                 p_total_ref: float,
+                 grid: int = GRID,
+                 board_mm: float = BOARD_MM,
+                 sigma_mm: float = SIGMA_MM) -> np.ndarray:
+    """
+    Convert component parameters to a 3-channel heat source map.
+
+    Input:
+        params_np: (N, M, 3), [x_mm, y_mm, power_W]
+
+    Output:
+        hmaps: (N, 3, grid, grid)
+
+    Channels:
+        ch0 = H_power = Σ P_k * Gauss / p_total_ref
+              local power intensity map
+
+        ch1 = H_shape = Σ P_k * Gauss / P_total
+              normalized source shape map
+
+        ch2 = P_scale = P_total / p_total_ref
+              global total power scale
+    """
+    N, M, _ = params_np.shape
+    sigma_norm = sigma_mm / board_mm
+
+    lin = np.linspace(0.5 / grid, 1.0 - 0.5 / grid, grid, dtype=np.float32)
+    gx, gy = np.meshgrid(lin, lin, indexing="ij")
+
+    h_power = np.zeros((N, grid, grid), dtype=np.float32)
+    h_shape = np.zeros((N, grid, grid), dtype=np.float32)
+    p_scale = np.zeros((N, 1, 1), dtype=np.float32)
+
+    for n in range(N):
+        total_p = 0.0
+        raw_map = np.zeros((grid, grid), dtype=np.float32)
+
+        for k in range(M):
+            x_mm, y_mm, p = params_np[n, k]
+            if p <= 0.0:
+                continue
+
+            x_n = x_mm / board_mm
+            y_n = y_mm / board_mm
+
+            dist_sq = (gx - x_n) ** 2 + (gy - y_n) ** 2
+            blob = p * np.exp(-dist_sq / (2.0 * sigma_norm ** 2))
+
+            raw_map += blob
+            total_p += p
+
+        h_power[n] = raw_map / max(p_total_ref, 1e-6)
+
+        if total_p > 0:
+            h_shape[n] = raw_map / total_p
+
+        p_scale[n, 0, 0] = total_p / max(p_total_ref, 1e-6)
+
+    p_scale_map = np.broadcast_to(p_scale, (N, grid, grid)).copy()
+
+    return np.stack([h_power, h_shape, p_scale_map], axis=1).astype(np.float32)
+
+
+def make_pairwise_features(params_np: np.ndarray,
+                           p_total_ref: float,
+                           board_mm: float = BOARD_MM) -> np.ndarray:
+    """
+    Pairwise interaction features for each component.
+
+    Output:
+        (N, M, 4)
+
+    Features:
+        [0] weighted_power
+        [1] min_dist_norm
+        [2] total_power_norm
+        [3] n_active_norm
+    """
+    N, M, _ = params_np.shape
+    feat = np.zeros((N, M, 4), dtype=np.float32)
+
+    valid_p = params_np[:, :, 2][params_np[:, :, 2] > 0]
+    p_single_ref = float(valid_p.max()) if len(valid_p) else 1.0
+    wp_ref = p_single_ref / (1.0 ** 2)
+
+    for n in range(N):
+        active = [k for k in range(M) if params_np[n, k, 2] > 0]
+        n_act = len(active)
+        total_p = params_np[n, :, 2].sum()
+
+        for i in active:
+            xi, yi, _ = params_np[n, i]
+
+            wp = 0.0
+            min_d = board_mm
+
+            for j in active:
+                if j == i:
+                    continue
+
+                xj, yj, pj = params_np[n, j]
+                d = max(np.sqrt((xi - xj) ** 2 + (yi - yj) ** 2), 1.0)
+
+                wp += pj / (d ** 2)
+                min_d = min(min_d, d)
+
+            feat[n, i, 0] = wp / max(wp_ref, 1e-6)
+            feat[n, i, 1] = min_d / board_mm
+            feat[n, i, 2] = total_p / max(p_total_ref, 1e-6)
+            feat[n, i, 3] = n_act / MAX_COMP_REF
+
+    return feat
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Set Transformer
+# ──────────────────────────────────────────────────────────────────────────────
+
+class MAB(nn.Module):
+    def __init__(self, d, heads, dropout=0.0):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d, heads, dropout=dropout, batch_first=True)
+        self.norm1 = nn.LayerNorm(d)
+        self.ff = nn.Sequential(
+            nn.Linear(d, 4 * d),
+            nn.GELU(),
+            nn.Linear(4 * d, d),
+        )
+        self.norm2 = nn.LayerNorm(d)
+
+    def forward(self, Q, K):
+        out, _ = self.attn(Q, K, K)
+        x = self.norm1(Q + out)
+        return self.norm2(x + self.ff(x))
+
+
+class SAB(nn.Module):
+    def __init__(self, d, heads, dropout=0.0):
+        super().__init__()
+        self.mab = MAB(d, heads, dropout)
+
+    def forward(self, X):
+        return self.mab(X, X)
+
+
+class PMA(nn.Module):
+    def __init__(self, d, heads, k=1, dropout=0.0):
+        super().__init__()
+        self.S = nn.Parameter(torch.randn(1, k, d))
+        self.rff = nn.Sequential(nn.Linear(d, d), nn.GELU())
+        self.mab = MAB(d, heads, dropout)
+
+    def forward(self, X):
+        S = self.S.expand(X.size(0), -1, -1)
+        return self.mab(S, self.rff(X))
+
+
+class SetTransformerEncoder(nn.Module):
+    def __init__(self, d_in=7, d_model=256, num_heads=8, n_sab=4, dropout=0.0):
+        super().__init__()
+        self.proj = nn.Linear(d_in, d_model)
+        self.sabs = nn.ModuleList([
+            SAB(d_model, num_heads, dropout) for _ in range(n_sab)
+        ])
+        self.pma = PMA(d_model, num_heads, k=1, dropout=dropout)
+        self.out = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+        )
+
+    def forward(self, X):
+        h = self.proj(X)
+        for sab in self.sabs:
+            h = sab(h)
+        h = self.pma(h).squeeze(1)
+        return self.out(h)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FNO model
+# ──────────────────────────────────────────────────────────────────────────────
+
+class SpectralConv2d(nn.Module):
+    def __init__(self, in_ch, out_ch, modes):
+        super().__init__()
+        scale = 1.0 / (in_ch * out_ch)
+        self.W1 = nn.Parameter(
+            scale * torch.randn(in_ch, out_ch, modes, modes, dtype=torch.cfloat)
+        )
+        self.W2 = nn.Parameter(
+            scale * torch.randn(in_ch, out_ch, modes, modes, dtype=torch.cfloat)
+        )
+        self.modes = modes
+        self.out_ch = out_ch
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        m = self.modes
+
+        xft = torch.fft.rfft2(x)
+        half = W // 2 + 1
+
+        out = torch.zeros(
+            B, self.out_ch, H, half,
+            dtype=torch.cfloat,
+            device=x.device,
+        )
+
+        out[:, :, :m, :m] = torch.einsum(
+            "bixy,ioxy->boxy",
+            xft[:, :, :m, :m],
+            self.W1,
+        )
+        out[:, :, -m:, :m] = torch.einsum(
+            "bixy,ioxy->boxy",
+            xft[:, :, -m:, :m],
+            self.W2,
+        )
+
+        return torch.fft.irfft2(out, s=(H, W))
+
+
+class FNOBlock(nn.Module):
+    def __init__(self, ch, modes):
+        super().__init__()
+        self.spec = SpectralConv2d(ch, ch, modes)
+        self.bypass = nn.Conv2d(ch, ch, 1)
+        self.norm = nn.InstanceNorm2d(ch, affine=True)
+
+    def forward(self, x):
+        return F.gelu(self.norm(self.spec(x) + self.bypass(x)))
+
+
+class SetFNOv3(nn.Module):
+    """
+    Revised SetFNO V3.
+
+    Branch A:
+        params_7d -> Set Transformer -> global condition
+
+    Branch B:
+        3-channel heatmap + xy grid -> FNO spatial branch
+
+    Output:
+        scaled thermal resistance field theta_scaled
+    """
+    def __init__(self,
+                 d_model=256,
+                 num_heads=8,
+                 n_sab=4,
+                 fno_ch=64,
+                 fno_modes=24,
+                 n_fno=6,
+                 dropout=0.0,
+                 grid=GRID,
+                 use_corrector=True):
+        super().__init__()
+
+        self.grid = grid
+        self.use_corrector = use_corrector
+
+        self.set_enc = SetTransformerEncoder(
+            d_in=7,
+            d_model=d_model,
+            num_heads=num_heads,
+            n_sab=n_sab,
+            dropout=dropout,
+        )
+
+        # 3 heatmap channels + x_grid + y_grid = 5 input channels
+        self.spatial_embed = nn.Sequential(
+            nn.Conv2d(5, fno_ch, 1),
+            nn.GELU(),
+            nn.Conv2d(fno_ch, fno_ch, 1),
+        )
+
+        lin = torch.linspace(0.5 / grid, 1.0 - 0.5 / grid, grid)
+        gx, gy = torch.meshgrid(lin, lin, indexing="ij")
+        self.register_buffer("grid_x", gx.unsqueeze(0).unsqueeze(0))
+        self.register_buffer("grid_y", gy.unsqueeze(0).unsqueeze(0))
+
+        self.adain_layers = nn.ModuleList([
+            nn.Linear(d_model, fno_ch * 2) for _ in range(n_fno)
+        ])
+
+        self.fno_blocks = nn.ModuleList([
+            FNOBlock(fno_ch, fno_modes) for _ in range(n_fno)
+        ])
+
+        self.out_head = nn.Sequential(
+            nn.Conv2d(fno_ch, fno_ch // 2, 1),
+            nn.GELU(),
+            nn.Conv2d(fno_ch // 2, 1, 1),
+        )
+
+    def forward(self, params_7d, heatmap):
+        B = params_7d.size(0)
+
+        cond = self.set_enc(params_7d)
+
+        gx = self.grid_x.expand(B, -1, -1, -1)
+        gy = self.grid_y.expand(B, -1, -1, -1)
+
+        spatial = torch.cat([heatmap, gx, gy], dim=1)
+        h = self.spatial_embed(spatial)
+
+        for blk, adain_lin in zip(self.fno_blocks, self.adain_layers):
+            h = blk(h)
+
+            gamma_beta = adain_lin(cond)
+            gamma, beta = gamma_beta.chunk(2, dim=1)
+
+            gamma = gamma.view(B, -1, 1, 1) + 1.0
+            beta = beta.view(B, -1, 1, 1)
+
+            h = gamma * h + beta
+
+        return self.out_head(h)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Physics loss
+# ──────────────────────────────────────────────────────────────────────────────
+
+def physics_loss(theta_pred,
+                 heatmap,
+                 c_adj=C_ADJ,
+                 lambda_pde=1e-4,
+                 lambda_bc=1e-3,
+                 source_rel_threshold=0.1):
+    """
+    theta_pred:
+        (B, 1, H, W), raw theta, not standardized
+
+    heatmap:
+        (B, 3, H, W)
+
+    Source mask uses:
+        heatmap[:, 1] = H_shape
+    """
+    T = theta_pred.squeeze(1)
+
+    bc_top = ((T[:, 0, :] - c_adj * T[:, 1, :]) ** 2).mean()
+    bc_bottom = ((T[:, -1, :] - c_adj * T[:, -2, :]) ** 2).mean()
+    bc_left = ((T[:, :, 0] - c_adj * T[:, :, 1]) ** 2).mean()
+    bc_right = ((T[:, :, -1] - c_adj * T[:, :, -2]) ** 2).mean()
+
+    L_bc = (bc_top + bc_bottom + bc_left + bc_right) / 4.0
+
+    lap_kernel = torch.tensor(
+        [[[[0.0, 1.0, 0.0],
+           [1.0, -4.0, 1.0],
+           [0.0, 1.0, 0.0]]]],
+        dtype=T.dtype,
+        device=T.device,
+    )
+
+    lap = F.conv2d(T.unsqueeze(1), lap_kernel, padding=1).squeeze(1)
+
+    # ch1 = normalized source shape
+    h_shape = heatmap[:, 1, :, :]
+    h_max = h_shape.amax(dim=(1, 2), keepdim=True).clamp(min=1e-6)
+    is_source = (h_shape > source_rel_threshold * h_max).float()
+
+    interior = torch.ones_like(lap)
+    interior[:, 0, :] = 0.0
+    interior[:, -1, :] = 0.0
+    interior[:, :, 0] = 0.0
+    interior[:, :, -1] = 0.0
+
+    non_source_interior = interior * (1.0 - is_source)
+    n_pts = non_source_interior.sum().clamp(min=1.0)
+
+    L_pde = ((lap ** 2) * non_source_interior).sum() / n_pts
+
+    return lambda_bc * L_bc, lambda_pde * L_pde
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Dataset
+# ──────────────────────────────────────────────────────────────────────────────
+
+class ThermalDatasetV3(Dataset):
+    def __init__(self,
+                 params_raw,
+                 temps_raw,
+                 t_amb=T_AMB,
+                 board_mm=BOARD_MM,
+                 sigma_mm=SIGMA_MM,
+                 max_power_ref=None,
+                 p_total_ref=None,
+                 theta_mean=None,
+                 theta_std=None):
+        params_raw = np.nan_to_num(params_raw, nan=0.0)
+
+        N, M, _ = params_raw.shape
+        self.t_amb = t_amb
+
+        total_power = params_raw[:, :, 2].sum(axis=1)
+        total_power = np.maximum(total_power, 0.1)
+        self.total_power = total_power.astype(np.float32)
+
+        theta = (temps_raw - t_amb) / total_power[:, None, None]
+
+        valid_powers = params_raw[:, :, 2][params_raw[:, :, 2] > 0]
+        self.max_power_ref = float(valid_powers.max()) if len(valid_powers) else 1.0
+
+        if max_power_ref is not None:
+            self.max_power_ref = float(max_power_ref)
+
+        params_norm = params_raw.copy()
+        params_norm[:, :, 0] /= board_mm
+        params_norm[:, :, 1] /= board_mm
+        params_norm[:, :, 2] /= max(self.max_power_ref, 1e-6)
+        params_norm = np.nan_to_num(params_norm, nan=0.0)
+
+        if p_total_ref is not None:
+            self.p_total_ref = float(p_total_ref)
+        else:
+            self.p_total_ref = float(params_raw[:, :, 2].sum(axis=1).max())
+
+        self.p_total_ref = max(self.p_total_ref, 1e-6)
+
+        pw_feat = make_pairwise_features(
+            params_raw,
+            p_total_ref=self.p_total_ref,
+            board_mm=board_mm,
+        )
+
+        params_7d = np.concatenate([params_norm, pw_feat], axis=-1)
+
+        hmaps = make_heatmap(
+            params_raw,
+            p_total_ref=self.p_total_ref,
+            grid=GRID,
+            board_mm=board_mm,
+            sigma_mm=sigma_mm,
+        )
+
+        theta_flat = theta.reshape(N, -1)
+
+        if theta_mean is not None and theta_std is not None:
+            self.theta_mean = float(theta_mean)
+            self.theta_std = float(theta_std)
+        else:
+            self.theta_mean = float(theta_flat.mean())
+            self.theta_std = float(theta_flat.std()) + 1e-8
+
+        theta_scaled = (theta - self.theta_mean) / self.theta_std
+
+        self.params_7d = torch.tensor(params_7d, dtype=torch.float32)
+        self.hmaps = torch.tensor(hmaps, dtype=torch.float32)
+        self.theta_scaled = torch.tensor(theta_scaled[:, None, :, :], dtype=torch.float32)
+        self.theta_raw = torch.tensor(theta[:, None, :, :], dtype=torch.float32)
+        self.temps_raw = torch.tensor(temps_raw[:, None, :, :], dtype=torch.float32)
+
+    def __len__(self):
+        return self.params_7d.size(0)
+
+    def __getitem__(self, idx):
+        return (
+            self.params_7d[idx],
+            self.hmaps[idx],
+            self.theta_scaled[idx],
+            self.total_power[idx],
+            self.temps_raw[idx],
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Utility functions
+# ──────────────────────────────────────────────────────────────────────────────
+
+def denorm_and_restore_T(theta_scaled_pred,
+                         total_power_w,
+                         theta_mean,
+                         theta_std,
+                         t_amb=T_AMB):
+    theta = theta_scaled_pred.squeeze(1) * theta_std + theta_mean
+    T = theta * total_power_w[:, None, None] + t_amb
+    return T
+
+
+def power_scale_augment(params_raw,
+                        temps_raw,
+                        n_copies,
+                        scale_min,
+                        scale_max,
+                        t_amb=T_AMB,
+                        seed=42,
+                        include_original=True):
+    if n_copies <= 0 and not include_original:
+        raise ValueError(
+            "power_scale_augment: n_copies must be > 0 when include_original=False"
+        )
+
+    rng = np.random.default_rng(seed)
+
+    aug_p_list = [params_raw] if include_original else []
+    aug_t_list = [temps_raw] if include_original else []
+
+    for _ in range(n_copies):
+        alpha = rng.uniform(scale_min, scale_max, size=(len(params_raw),)).astype(np.float32)
+
+        new_p = params_raw.copy()
+        new_p[:, :, 2] *= alpha[:, None]
+
+        new_t = alpha[:, None, None] * (temps_raw - t_amb) + t_amb
+
+        aug_p_list.append(new_p)
+        aug_t_list.append(new_t)
+
+    return np.concatenate(aug_p_list, axis=0), np.concatenate(aug_t_list, axis=0)
+
+
+def build_model(args, device):
+    return SetFNOv3(
+        d_model=args.d_model,
+        num_heads=args.num_heads,
+        n_sab=args.n_sab,
+        fno_ch=args.fno_ch,
+        fno_modes=args.fno_modes,
+        n_fno=args.n_fno,
+        dropout=args.dropout,
+        grid=GRID,
+        use_corrector=not args.no_corrector,
+    ).to(device)
+
+
+def count_parameters(model, trainable_only=False):
+    if trainable_only:
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return sum(p.numel() for p in model.parameters())
+
+
+def freeze_backbone_for_phase2(model):
+    for p in model.parameters():
+        p.requires_grad = False
+
+    for module in [model.adain_layers, model.out_head]:
+        for p in module.parameters():
+            p.requires_grad = True
+
+
+def save_norm_info(norm_info, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "norm_info.json"), "w") as f:
+        json.dump(norm_info, f, indent=2)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Training
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_training_phase(model,
+                       dl_tr,
+                       dl_val,
+                       ds_tr,
+                       device,
+                       norm_info,
+                       out_dir,
+                       epochs,
+                       lr,
+                       weight_decay,
+                       lambda_bc,
+                       lambda_pde,
+                       early_stopping,
+                       patience,
+                       min_delta,
+                       log_every,
+                       phase_name,
+                       ckpt_args):
+    os.makedirs(out_dir, exist_ok=True)
+
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    n_trainable = sum(p.numel() for p in trainable_params)
+
+    print(f"\n=== {phase_name} ===")
+    print(f"Trainable parameters: {n_trainable:,}")
+
+    optimizer = optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=epochs,
+        eta_min=lr * 0.01,
+    )
+
+    best_val_loss = float("inf")
+    patience_cnt = 0
+
+    history = {
+        "train": [],
+        "val": [],
+        "lr": [],
+    }
+
+    best_path = os.path.join(out_dir, "setfno_v3_best.pth")
+    final_path = os.path.join(out_dir, "setfno_v3_final.pth")
+
+    for epoch in range(1, epochs + 1):
+        model.train()
+        tr_loss = 0.0
+
+        for params_7d, hmaps, theta_sc, total_p, temps_r in dl_tr:
+            params_7d = params_7d.to(device)
+            hmaps = hmaps.to(device)
+            theta_sc = theta_sc.to(device)
+
+            optimizer.zero_grad()
+
+            theta_pred_sc = model(params_7d, hmaps)
+
+            loss_data = F.mse_loss(theta_pred_sc, theta_sc)
+
+            theta_pred_raw = theta_pred_sc * ds_tr.theta_std + ds_tr.theta_mean
+
+            L_bc, L_pde = physics_loss(
+                theta_pred_raw,
+                hmaps,
+                lambda_bc=lambda_bc,
+                lambda_pde=lambda_pde,
+            )
+
+            loss = loss_data + L_bc + L_pde
+
+            if not torch.isfinite(loss):
+                print(
+                    f"[warn] NaN/Inf skipped: "
+                    f"data={loss_data.item():.5f}, "
+                    f"bc={L_bc.item():.5f}, "
+                    f"pde={L_pde.item():.5f}"
+                )
+                optimizer.zero_grad()
+                continue
+
+            loss.backward()
+            nn.utils.clip_grad_norm_(trainable_params, 1.0)
+            optimizer.step()
+
+            tr_loss += loss.item() * len(params_7d)
+
+        tr_loss /= len(dl_tr.dataset)
+
+        model.eval()
+        val_loss = 0.0
+
+        with torch.no_grad():
+            for params_7d, hmaps, theta_sc, _, _ in dl_val:
+                params_7d = params_7d.to(device)
+                hmaps = hmaps.to(device)
+                theta_sc = theta_sc.to(device)
+
+                pred = model(params_7d, hmaps)
+                val_loss += F.mse_loss(pred, theta_sc).item() * len(params_7d)
+
+        val_loss /= len(dl_val.dataset)
+
+        scheduler.step()
+
+        history["train"].append(tr_loss)
+        history["val"].append(val_loss)
+        history["lr"].append(scheduler.get_last_lr()[0])
+
+        if epoch % log_every == 0 or epoch == 1:
+            print(
+                f"[{phase_name} {epoch:4d}/{epochs}] "
+                f"train={tr_loss:.6f} "
+                f"val={val_loss:.6f} "
+                f"lr={scheduler.get_last_lr()[0]:.2e}"
+            )
+
+        if val_loss < best_val_loss - min_delta:
+            best_val_loss = val_loss
+            patience_cnt = 0
+
+            torch.save({
+                "model": model.state_dict(),
+                "norm_info": norm_info,
+                "args": ckpt_args,
+                "phase": phase_name,
+            }, best_path)
+        else:
+            patience_cnt += 1
+
+            if early_stopping and patience_cnt >= patience:
+                print(f"{phase_name} early stopping at epoch {epoch}")
+                break
+
+    torch.save({
+        "model": model.state_dict(),
+        "norm_info": norm_info,
+        "args": ckpt_args,
+        "phase": phase_name,
+    }, final_path)
+
+    _plot_loss(history, os.path.join(out_dir, "loss_curves.png"))
+
+    return {
+        "history": history,
+        "best_val_loss": best_val_loss,
+        "best_path": best_path,
+        "final_path": final_path,
+        "epochs_ran": len(history["train"]),
+        "trainable_params": n_trainable,
+    }
+
+
+def train(args):
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+
+    params_raw = np.load(args.params)
+    temps_raw = np.load(args.temps)
+
+    if params_raw.ndim == 2:
+        N = params_raw.shape[0]
+        params_raw = params_raw.reshape(N, -1, 3)
+
+    if temps_raw.ndim == 2:
+        N = temps_raw.shape[0]
+        gs = int(round(np.sqrt(temps_raw.shape[1])))
+        temps_raw = temps_raw.reshape(N, gs, gs)
+
+    print(f"Loaded: params={params_raw.shape}, temps={temps_raw.shape}")
+    print(f"Temps range: {temps_raw.min():.2f} - {temps_raw.max():.2f} °C")
+
+    comp_counts = (np.nan_to_num(params_raw, nan=0.0)[:, :, 2] > 0).sum(axis=1)
+    idx_all = np.arange(len(params_raw))
+
+    idx_tr, idx_te = train_test_split(
+        idx_all,
+        test_size=args.test_ratio,
+        random_state=42,
+        stratify=comp_counts,
+    )
+
+    tr_counts = comp_counts[idx_tr]
+
+    idx_tr, idx_val = train_test_split(
+        idx_tr,
+        test_size=args.val_ratio,
+        random_state=42,
+        stratify=tr_counts,
+    )
+
+    print(f"Train: {len(idx_tr)}, Val: {len(idx_val)}, Test: {len(idx_te)}")
+
+    raw_tr_p = params_raw[idx_tr]
+    raw_tr_t = temps_raw[idx_tr]
+
+    raw_tr_p_clean = np.nan_to_num(raw_tr_p, nan=0.0)
+
+    raw_p_total_ref = float(raw_tr_p_clean[:, :, 2].sum(axis=1).max())
+
+    raw_valid_powers = raw_tr_p_clean[:, :, 2]
+    raw_valid_powers = raw_valid_powers[raw_valid_powers > 0]
+
+    raw_max_power_ref = float(raw_valid_powers.max()) if len(raw_valid_powers) else 1.0
+
+    print(f"raw p_total_ref: {raw_p_total_ref:.3f} W")
+    print(f"raw max_power_ref: {raw_max_power_ref:.3f} W")
+
+    if args.two_phase:
+        phase1_dir = os.path.join(args.out_dir, "phase1")
+        phase2_dir = os.path.join(args.out_dir, "phase2")
+
+        ds_tr_phase1 = ThermalDatasetV3(
+            raw_tr_p,
+            raw_tr_t,
+            p_total_ref=raw_p_total_ref,
+            max_power_ref=raw_max_power_ref,
+        )
+
+        ds_val = ThermalDatasetV3(
+            params_raw[idx_val],
+            temps_raw[idx_val],
+            p_total_ref=raw_p_total_ref,
+            max_power_ref=raw_max_power_ref,
+            theta_mean=ds_tr_phase1.theta_mean,
+            theta_std=ds_tr_phase1.theta_std,
+        )
+
+        ds_te = ThermalDatasetV3(
+            params_raw[idx_te],
+            temps_raw[idx_te],
+            p_total_ref=raw_p_total_ref,
+            max_power_ref=raw_max_power_ref,
+            theta_mean=ds_tr_phase1.theta_mean,
+            theta_std=ds_tr_phase1.theta_std,
+        )
+
+        norm_info = {
+            "max_power_ref": raw_max_power_ref,
+            "p_total_ref": raw_p_total_ref,
+            "theta_mean": ds_tr_phase1.theta_mean,
+            "theta_std": ds_tr_phase1.theta_std,
+            "t_amb": T_AMB,
+            "board_mm": BOARD_MM,
+        }
+
+        save_norm_info(norm_info, args.out_dir)
+        save_norm_info(norm_info, phase1_dir)
+        save_norm_info(norm_info, phase2_dir)
+
+        dl_tr_phase1 = DataLoader(
+            ds_tr_phase1,
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=0,
+        )
+
+        dl_val = DataLoader(
+            ds_val,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
+
+        dl_te = DataLoader(
+            ds_te,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
+
+        model = build_model(args, device)
+        total_params = count_parameters(model)
+
+        print(f"Model parameters: {total_params:,}")
+
+        phase1_result = run_training_phase(
+            model,
+            dl_tr_phase1,
+            dl_val,
+            ds_tr_phase1,
+            device,
+            norm_info,
+            phase1_dir,
+            epochs=args.epochs,
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+            lambda_bc=args.lambda_bc,
+            lambda_pde=args.lambda_pde,
+            early_stopping=args.early_stopping,
+            patience=args.patience,
+            min_delta=args.min_delta,
+            log_every=args.log_every,
+            phase_name="phase1",
+            ckpt_args=vars(args),
+        )
+
+        ckpt_phase1 = torch.load(phase1_result["best_path"], map_location=device)
+        model.load_state_dict(ckpt_phase1["model"])
+
+        freeze_backbone_for_phase2(model)
+
+        ft_p, ft_t = power_scale_augment(
+            raw_tr_p,
+            raw_tr_t,
+            n_copies=args.phase2_power_aug_copies,
+            scale_min=args.phase2_power_aug_min,
+            scale_max=args.phase2_power_aug_max,
+            include_original=False,
+        )
+
+        print(
+            f"Phase2 finetune set: {len(ft_p)} samples, "
+            f"scale=[{args.phase2_power_aug_min}, {args.phase2_power_aug_max}]"
+        )
+
+        ds_tr_phase2 = ThermalDatasetV3(
+            ft_p,
+            ft_t,
+            p_total_ref=raw_p_total_ref,
+            max_power_ref=raw_max_power_ref,
+            theta_mean=ds_tr_phase1.theta_mean,
+            theta_std=ds_tr_phase1.theta_std,
+        )
+
+        dl_tr_phase2 = DataLoader(
+            ds_tr_phase2,
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=0,
+        )
+
+        phase2_result = run_training_phase(
+            model,
+            dl_tr_phase2,
+            dl_val,
+            ds_tr_phase2,
+            device,
+            norm_info,
+            phase2_dir,
+            epochs=args.phase2_epochs,
+            lr=args.phase2_lr,
+            weight_decay=args.weight_decay,
+            lambda_bc=args.lambda_bc,
+            lambda_pde=args.lambda_pde,
+            early_stopping=args.early_stopping,
+            patience=args.phase2_patience,
+            min_delta=args.min_delta,
+            log_every=args.log_every,
+            phase_name="phase2",
+            ckpt_args=vars(args),
+        )
+
+        best_ckpt = torch.load(phase2_result["best_path"], map_location=device)
+        model.load_state_dict(best_ckpt["model"])
+
+        shutil.copy2(
+            phase2_result["best_path"],
+            os.path.join(args.out_dir, "setfno_v3_best.pth"),
+        )
+
+        shutil.copy2(
+            phase2_result["final_path"],
+            os.path.join(args.out_dir, "setfno_v3_final.pth"),
+        )
+
+        print("\n=== Test Set Evaluation ===")
+        _evaluate(
+            model,
+            dl_te,
+            ds_te,
+            device,
+            norm_info,
+            os.path.join(args.out_dir, "test_results"),
+        )
+
+        cfg = vars(args).copy()
+        cfg["training_mode"] = "two_phase"
+        cfg["model_params"] = total_params
+        cfg["phase1_best_val_loss"] = phase1_result["best_val_loss"]
+        cfg["phase2_best_val_loss"] = phase2_result["best_val_loss"]
+
+        with open(os.path.join(args.out_dir, "run_config.json"), "w") as f:
+            json.dump(cfg, f, indent=2)
+
+        print(f"\n✓ Two-phase training finished. Results saved to: {args.out_dir}")
+        return
+
+    tr_p, tr_t = raw_tr_p, raw_tr_t
+
+    if args.power_aug_copies > 0:
+        tr_p, tr_t = power_scale_augment(
+            tr_p,
+            tr_t,
+            n_copies=args.power_aug_copies,
+            scale_min=args.power_aug_min,
+            scale_max=args.power_aug_max,
+            include_original=True,
+        )
+
+        print(
+            f"Power-scale augmented: {len(raw_tr_p)} -> {len(tr_p)} samples, "
+            f"copies={args.power_aug_copies}, "
+            f"scale=[{args.power_aug_min}, {args.power_aug_max}]"
+        )
+
+    # Important:
+    # Use original training references, not augmented references.
+    p_total_ref = raw_p_total_ref
+    max_power_ref = raw_max_power_ref
+
+    print(f"p_total_ref used: {p_total_ref:.3f} W")
+    print(f"max_power_ref used: {max_power_ref:.3f} W")
+
+    ds_tr = ThermalDatasetV3(
+        tr_p,
+        tr_t,
+        p_total_ref=p_total_ref,
+        max_power_ref=max_power_ref,
+    )
+
+    ds_val = ThermalDatasetV3(
+        params_raw[idx_val],
+        temps_raw[idx_val],
+        p_total_ref=p_total_ref,
+        max_power_ref=max_power_ref,
+        theta_mean=ds_tr.theta_mean,
+        theta_std=ds_tr.theta_std,
+    )
+
+    ds_te = ThermalDatasetV3(
+        params_raw[idx_te],
+        temps_raw[idx_te],
+        p_total_ref=p_total_ref,
+        max_power_ref=max_power_ref,
+        theta_mean=ds_tr.theta_mean,
+        theta_std=ds_tr.theta_std,
+    )
+
+    norm_info = {
+        "max_power_ref": max_power_ref,
+        "p_total_ref": p_total_ref,
+        "theta_mean": ds_tr.theta_mean,
+        "theta_std": ds_tr.theta_std,
+        "t_amb": T_AMB,
+        "board_mm": BOARD_MM,
+    }
+
+    save_norm_info(norm_info, args.out_dir)
+
+    dl_tr = DataLoader(
+        ds_tr,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=0,
+    )
+
+    dl_val = DataLoader(
+        ds_val,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    dl_te = DataLoader(
+        ds_te,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    model = build_model(args, device)
+    n_params = count_parameters(model)
+
+    print(f"Model parameters: {n_params:,}")
+
+    phase_result = run_training_phase(
+        model,
+        dl_tr,
+        dl_val,
+        ds_tr,
+        device,
+        norm_info,
+        args.out_dir,
+        epochs=args.epochs,
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        lambda_bc=args.lambda_bc,
+        lambda_pde=args.lambda_pde,
+        early_stopping=args.early_stopping,
+        patience=args.patience,
+        min_delta=args.min_delta,
+        log_every=args.log_every,
+        phase_name="train",
+        ckpt_args=vars(args),
+    )
+
+    best_ckpt = torch.load(phase_result["best_path"], map_location=device)
+    model.load_state_dict(best_ckpt["model"])
+
+    print("\n=== Test Set Evaluation ===")
+    _evaluate(
+        model,
+        dl_te,
+        ds_te,
+        device,
+        norm_info,
+        os.path.join(args.out_dir, "test_results"),
+    )
+
+    cfg = vars(args).copy()
+    cfg["model_params"] = n_params
+    cfg["best_val_loss"] = phase_result["best_val_loss"]
+
+    with open(os.path.join(args.out_dir, "run_config.json"), "w") as f:
+        json.dump(cfg, f, indent=2)
+
+    print(f"\n✓ Training finished. Results saved to: {args.out_dir}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Evaluation
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _evaluate(model, dataloader, dataset, device, norm_info, save_prefix):
+    os.makedirs(save_prefix, exist_ok=True)
+
+    model.eval()
+
+    all_true = []
+    all_pred = []
+
+    with torch.no_grad():
+        for params_7d, hmaps, _, total_p, temps_r in dataloader:
+            params_7d = params_7d.to(device)
+            hmaps = hmaps.to(device)
+            total_p_dev = total_p.to(device)
+
+            theta_pred = model(params_7d, hmaps)
+
+            T_pred = denorm_and_restore_T(
+                theta_pred,
+                total_p_dev,
+                norm_info["theta_mean"],
+                norm_info["theta_std"],
+                norm_info["t_amb"],
+            )
+
+            T_true = temps_r.squeeze(1)
+
+            all_true.append(T_true.cpu().numpy().reshape(len(T_true), -1))
+            all_pred.append(T_pred.cpu().numpy().reshape(len(T_pred), -1))
+
+    all_true = np.concatenate(all_true, axis=0)
+    all_pred = np.concatenate(all_pred, axis=0)
+
+    r2_total = r2_score(all_true.ravel(), all_pred.ravel())
+    r2_per = [r2_score(all_true[i], all_pred[i]) for i in range(len(all_true))]
+
+    print(f"  R² all pixels: {r2_total:.4f}")
+    print(
+        f"  R² per-sample mean: {np.mean(r2_per):.4f}, "
+        f"std={np.std(r2_per):.4f}, "
+        f"min={np.min(r2_per):.4f}"
+    )
+
+    n_vis = min(6, len(all_true))
+
+    fig, axes = plt.subplots(n_vis, 3, figsize=(12, 3 * n_vis))
+
+    if n_vis == 1:
+        axes = axes[None, :]
+
+    for i in range(n_vis):
+        T_t = all_true[i].reshape(GRID, GRID)
+        T_p = all_pred[i].reshape(GRID, GRID)
+
+        vmin, vmax = T_t.min(), T_t.max()
+
+        axes[i, 0].imshow(T_t.T, cmap="hot", origin="lower", vmin=vmin, vmax=vmax)
+        axes[i, 0].set_title("True T")
+
+        axes[i, 1].imshow(T_p.T, cmap="hot", origin="lower", vmin=vmin, vmax=vmax)
+        axes[i, 1].set_title(f"Pred T, R²={r2_per[i]:.3f}")
+
+        err = T_p - T_t
+        im = axes[i, 2].imshow(err.T, cmap="coolwarm", origin="lower")
+        axes[i, 2].set_title(f"Error, MAE={np.abs(err).mean():.2f}°C")
+        plt.colorbar(im, ax=axes[i, 2])
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_prefix, "comparison.png"), dpi=150)
+    plt.close()
+
+    results = {
+        "r2_all_pixels": float(r2_total),
+        "r2_per_sample_mean": float(np.mean(r2_per)),
+        "r2_per_sample_std": float(np.std(r2_per)),
+        "r2_per_sample_min": float(np.min(r2_per)),
+    }
+
+    with open(os.path.join(save_prefix, "results.json"), "w") as f:
+        json.dump(results, f, indent=2)
+
+    return results
+
+
+def _plot_loss(history, save_path):
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    ax.semilogy(history["train"], label="train")
+    ax.semilogy(history["val"], label="val")
+
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SOR refinement
+# ──────────────────────────────────────────────────────────────────────────────
+
+def sor_refine_theta(theta_np,
+                     hmap_shape_np,
+                     total_power_w,
+                     max_iters=50,
+                     omega=1.5,
+                     tol=1e-4,
+                     dx_m=DX_M,
+                     source_rel_threshold=0.1):
+    T = theta_np.copy().astype(np.float64)
+
+    H, W = T.shape
+
+    hmap_max = float(hmap_shape_np.max())
+    abs_threshold = source_rel_threshold * hmap_max if hmap_max > 1e-6 else 1e-6
+    is_source = hmap_shape_np > abs_threshold
+
+    c = K_FR4 / (K_FR4 + H_CONV * dx_m)
+
+    for _ in range(max_iters):
+        max_update = 0.0
+
+        for i in range(1, H - 1):
+            for j in range(1, W - 1):
+                if is_source[i, j]:
+                    continue
+
+                neighbor_sum = (
+                    T[i - 1, j]
+                    + T[i + 1, j]
+                    + T[i, j - 1]
+                    + T[i, j + 1]
+                )
+
+                residual = neighbor_sum - 4.0 * T[i, j]
+
+                if abs(residual) <= tol:
+                    continue
+
+                T_new = 0.25 * neighbor_sum
+                update = omega * (T_new - T[i, j])
+
+                T[i, j] += update
+                max_update = max(max_update, abs(update))
+
+        T[0, :] = c * T[1, :]
+        T[-1, :] = c * T[-2, :]
+        T[:, 0] = c * T[:, 1]
+        T[:, -1] = c * T[:, -2]
+
+        if max_update < tol:
+            break
+
+    return T.astype(np.float32)
+
+
+def test_only(args):
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    ckpt = torch.load(args.model_path, map_location=device)
+    norm_info = ckpt["norm_info"]
+
+    model = build_model(args, device)
+    model.load_state_dict(ckpt["model"])
+    model.eval()
+
+    params_raw = np.load(args.params)
+    temps_raw = np.load(args.temps)
+
+    if params_raw.ndim == 2:
+        params_raw = params_raw.reshape(len(params_raw), -1, 3)
+
+    if temps_raw.ndim == 2:
+        gs = int(round(np.sqrt(temps_raw.shape[1])))
+        temps_raw = temps_raw.reshape(len(temps_raw), gs, gs)
+
+    ds = ThermalDatasetV3(
+        params_raw,
+        temps_raw,
+        p_total_ref=norm_info["p_total_ref"],
+        max_power_ref=norm_info["max_power_ref"],
+        theta_mean=norm_info["theta_mean"],
+        theta_std=norm_info["theta_std"],
+    )
+
+    dl = DataLoader(
+        ds,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    print(f"Testing {len(ds)} samples from: {args.params}")
+
+    if args.sor_refine:
+        print(f"SOR refinement enabled, max_iters={args.sor_iters}")
+
+        all_true = []
+        all_pred = []
+
+        theta_mean = norm_info["theta_mean"]
+        theta_std = norm_info["theta_std"]
+
+        with torch.no_grad():
+            for params_7d, hmaps, _, total_p, temps_r in dl:
+                params_7d_d = params_7d.to(device)
+                hmaps_d = hmaps.to(device)
+
+                theta_pred_sc = model(params_7d_d, hmaps_d)
+                theta_pred_raw = theta_pred_sc * theta_std + theta_mean
+
+                for b in range(len(params_7d)):
+                    theta_np = theta_pred_raw[b, 0].cpu().numpy()
+
+                    # ch1 = source shape map
+                    hmap_shape = hmaps[b, 1].numpy()
+
+                    tp = float(total_p[b])
+
+                    theta_ref = sor_refine_theta(
+                        theta_np,
+                        hmap_shape,
+                        tp,
+                        max_iters=args.sor_iters,
+                    )
+
+                    T_pred = theta_ref * tp + norm_info["t_amb"]
+                    T_true = temps_r[b, 0].numpy()
+
+                    all_true.append(T_true.ravel())
+                    all_pred.append(T_pred.ravel())
+
+        all_true = np.array(all_true)
+        all_pred = np.array(all_pred)
+
+        r2_total = r2_score(all_true.ravel(), all_pred.ravel())
+        r2_per = [r2_score(all_true[i], all_pred[i]) for i in range(len(all_true))]
+
+        print(f"  [SOR] R² all pixels: {r2_total:.4f}")
+        print(f"  [SOR] R² per-sample mean: {np.mean(r2_per):.4f}")
+
+        results = {
+            "r2_all_pixels": float(r2_total),
+            "r2_per_sample_mean": float(np.mean(r2_per)),
+            "r2_per_sample_std": float(np.std(r2_per)),
+            "r2_per_sample_min": float(np.min(r2_per)),
+        }
+
+        with open(os.path.join(args.out_dir, "results_sor.json"), "w") as f:
+            json.dump(results, f, indent=2)
+
+    else:
+        results = _evaluate(model, dl, ds, device, norm_info, args.out_dir)
+        print("Results:", results)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI
+# ──────────────────────────────────────────────────────────────────────────────
+
+def parse_args():
+    p = argparse.ArgumentParser(description="SetFNO V3 3-channel training")
+
+    p.add_argument("--params", default="training_data/params_count_sweep.npy")
+    p.add_argument("--temps", default="training_data/temps_count_sweep.npy")
+
+    p.add_argument("--out-dir", default="my_scripts/results_v3_3ch")
+    p.add_argument("--model-path", default="my_scripts/results_v3_3ch/setfno_v3_best.pth")
+    p.add_argument("--test-only", action="store_true")
+
+    p.add_argument("--d-model", type=int, default=256)
+    p.add_argument("--num-heads", type=int, default=8)
+    p.add_argument("--n-sab", type=int, default=4)
+    p.add_argument("--fno-ch", type=int, default=64)
+    p.add_argument("--fno-modes", type=int, default=24)
+    p.add_argument("--n-fno", type=int, default=6)
+    p.add_argument("--dropout", type=float, default=0.0)
+    p.add_argument("--no-corrector", action="store_true")
+
+    p.add_argument("--epochs", type=int, default=2000)
+    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--lr", type=float, default=5e-5)
+    p.add_argument("--weight-decay", type=float, default=1e-5)
+
+    p.add_argument("--test-ratio", type=float, default=0.1)
+    p.add_argument("--val-ratio", type=float, default=0.1)
+
+    p.add_argument("--early-stopping", action="store_true")
+    p.add_argument("--patience", type=int, default=200)
+    p.add_argument("--min-delta", type=float, default=0.0)
+    p.add_argument("--log-every", type=int, default=50)
+
+    p.add_argument("--lambda-bc", type=float, default=1e-3)
+    p.add_argument("--lambda-pde", type=float, default=1e-4)
+
+    p.add_argument("--sor-refine", action="store_true")
+    p.add_argument("--sor-iters", type=int, default=50)
+
+    p.add_argument("--power-aug-copies", type=int, default=2)
+    p.add_argument("--power-aug-min", type=float, default=0.8)
+    p.add_argument("--power-aug-max", type=float, default=2.0)
+
+    p.add_argument("--two-phase", action="store_true")
+    p.add_argument("--phase2-epochs", type=int, default=400)
+    p.add_argument("--phase2-lr", type=float, default=1e-5)
+    p.add_argument("--phase2-patience", type=int, default=80)
+    p.add_argument("--phase2-power-aug-copies", type=int, default=2)
+    p.add_argument("--phase2-power-aug-min", type=float, default=1.0)
+    p.add_argument("--phase2-power-aug-max", type=float, default=2.0)
+
+    return p.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    if args.test_only:
+        test_only(args)
+    else:
+        train(args)
