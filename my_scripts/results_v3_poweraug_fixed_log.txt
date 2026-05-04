@@ -1,0 +1,22 @@
+Device: cuda
+Loaded: params=(300, 5, 3), temps=(300, 100, 100)
+Temps range: 31.77 - 75.53 °C
+Train: 243, Val: 27, Test: 30
+raw train max total power: 13.70 W
+Power-scale augmented: 243 -> 972 samples (x4, scale [1.2,2.5])
+p_total_ref (raw train max total power): 13.70 W
+max_power_ref (raw train max single power): 3.20 W
+Model parameters: 32,623,937
+
+=== train ===
+Trainable parameters: 32,623,937
+[train   50/2000] train=0.00078  val=0.00906  lr=4.99e-05
+[train  100/2000] train=0.00072  val=0.00902  lr=4.97e-05
+[train  150/2000] train=0.00074  val=0.00923  lr=4.93e-05
+[train  200/2000] train=0.00067  val=0.00940  lr=4.88e-05
+[train  250/2000] train=0.00067  val=0.00958  lr=4.81e-05
+train early stopping at epoch 266 (patience=200)
+
+=== Test Set Evaluation ===
+  R² (all pixels): 0.9998
+  R² (per sample mean): 0.9904  std=0.0122  min=0.9464

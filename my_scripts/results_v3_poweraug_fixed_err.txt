@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "C:\Users\mkale\Desktop\hou_capita\temperature_prediction\my_scripts\train_setfno_v3.py", line 1208, in <module>
+    train(args)
+    ~~~~~^^^^^^
+  File "C:\Users\mkale\Desktop\hou_capita\temperature_prediction\my_scripts\train_setfno_v3.py", line 922, in train
+    print(f"\n\u2713 \u8bad\u7ec3\u5b8c\u6210\uff01\u7ed3\u679c\u4fdd\u5b58\u5230: {args.out_dir}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\mkale\anaconda3\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 2: character maps to <undefined>
