@@ -613,6 +613,96 @@ def data_loss_with_power_weight(theta_pred_sc, theta_sc, total_p, p_total_ref,
     return (per_sample * weights).mean()
 
 
+def load_plan_a_teacher(model_path, device):
+    """
+    加载 PlanA+Physics 作为 teacher。
+    teacher 输出是 PlanA 的 scaled physics-norm θ，需要再转换到 V3 的 θ scaler。
+    """
+    if not model_path:
+        raise ValueError('--teacher-model-path is required when --teacher-distill is enabled')
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f'PlanA teacher checkpoint not found: {model_path}')
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from models.set_fno_thermal import SetFNOModel
+
+    try:
+        ckpt = torch.load(model_path, map_location=device, weights_only=False)
+    except TypeError:
+        ckpt = torch.load(model_path, map_location=device)
+
+    t_args = ckpt.get('args', {})
+    teacher = SetFNOModel(
+        d_in=t_args.get('d_per_comp', 3),
+        d_model=t_args.get('d_model', 256),
+        num_heads=t_args.get('num_heads', 8),
+        n_sab=t_args.get('n_sab', 4),
+        fno_ch=t_args.get('fno_ch', 64),
+        fno_modes=t_args.get('fno_modes', 24),
+        n_fno=t_args.get('n_fno', 6),
+        dropout=t_args.get('dropout', 0.0),
+        out_size=ckpt.get('grid_size', GRID),
+    ).to(device)
+
+    sd = ckpt.get('state_dict', ckpt.get('model', ckpt))
+    if any(k.startswith('base.') for k in sd.keys()):
+        new_sd = {}
+        for k, v in sd.items():
+            if k.startswith('base.'):
+                new_sd[k[5:]] = v
+            elif k not in ('grid_x', 'grid_y'):
+                new_sd[k] = v
+        sd = new_sd
+    teacher.load_state_dict(sd)
+    teacher.eval()
+    for p in teacher.parameters():
+        p.requires_grad = False
+
+    scaler_mean = torch.tensor(ckpt['scaler_y_mean'], dtype=torch.float32, device=device).view(1, 1, GRID, GRID)
+    scaler_scale = torch.tensor(ckpt['scaler_y_scale'], dtype=torch.float32, device=device).view(1, 1, GRID, GRID)
+    teacher_norm = ckpt.get('norm_info', {})
+    teacher_max_power = float(teacher_norm.get('max_power', 1.0))
+
+    print(f"PlanA teacher loaded: {model_path}")
+    print(f"  teacher max_power_ref={teacher_max_power:.4f}, physics_norm={teacher_norm.get('physics_norm', None)}")
+    return {
+        'model': teacher,
+        'scaler_mean': scaler_mean,
+        'scaler_scale': scaler_scale,
+        'max_power_ref': max(teacher_max_power, 1e-6),
+    }
+
+
+def teacher_distillation_loss(theta_pred_sc, params_7d, total_p, norm_info, ds_tr,
+                              teacher_bundle=None, weight=0.0,
+                              power_min=1.10, power_max=1.60):
+    """
+    只在 6/7/8 对应的中功率区间做 PlanA teacher 蒸馏。
+    9组件高功率区间不蒸馏，避免学习 PlanA 在 9组件上的错误外推。
+    """
+    if teacher_bundle is None or weight <= 0:
+        return theta_pred_sc.new_tensor(0.0)
+
+    scale = total_p / max(float(norm_info['p_total_ref']), 1e-6)
+    mask = (scale >= power_min) & (scale <= power_max)
+    if mask.sum() == 0:
+        return theta_pred_sc.new_tensor(0.0)
+
+    plan_a_input = params_7d[:, :, :3].clone()
+    plan_a_input[:, :, 2] = plan_a_input[:, :, 2] * (
+        float(norm_info['max_power_ref']) / teacher_bundle['max_power_ref'])
+
+    with torch.no_grad():
+        teacher_pred_sc = teacher_bundle['model'](plan_a_input)
+        teacher_theta = teacher_pred_sc * teacher_bundle['scaler_scale'] + teacher_bundle['scaler_mean']
+        teacher_theta_v3_sc = (teacher_theta - ds_tr.theta_mean) / ds_tr.theta_std
+
+    per_sample = (theta_pred_sc - teacher_theta_v3_sc).pow(2).mean(dim=(1, 2, 3))
+    return weight * per_sample[mask].mean()
+
+
 def build_model(args, device):
     return SetFNOv3(
         d_model=args.d_model, num_heads=args.num_heads, n_sab=args.n_sab,
@@ -650,7 +740,9 @@ def run_training_phase(model, dl_tr, dl_val, ds_tr, device, norm_info, out_dir,
                        log_every, phase_name, ckpt_args,
                        power_loss_weighting=False,
                        mid_power_min=1.10, mid_power_max=1.60, mid_power_weight=2.0,
-                       high_power_min=2.00, high_power_max=2.35, high_power_weight=1.5):
+                       high_power_min=2.00, high_power_max=2.35, high_power_weight=1.5,
+                       teacher_bundle=None, teacher_weight=0.0,
+                       teacher_power_min=1.10, teacher_power_max=1.60):
     os.makedirs(out_dir, exist_ok=True)
 
     trainable_params = [p for p in model.parameters() if p.requires_grad]
@@ -694,10 +786,16 @@ def run_training_phase(model, dl_tr, dl_val, ds_tr, device, norm_info, out_dir,
                 theta_pred_raw, hmaps,
                 lambda_bc=lambda_bc,
                 lambda_pde=lambda_pde)
+            L_teacher = teacher_distillation_loss(
+                theta_pred_sc, params_7d, total_p, norm_info, ds_tr,
+                teacher_bundle=teacher_bundle,
+                weight=teacher_weight,
+                power_min=teacher_power_min,
+                power_max=teacher_power_max)
 
-            loss = loss_data + L_bc + L_pde
+            loss = loss_data + L_bc + L_pde + L_teacher
             if not torch.isfinite(loss):
-                print(f"  [warn] NaN/Inf loss skipped (data={loss_data.item():.4f} bc={L_bc.item():.4f} pde={L_pde.item():.4f})")
+                print(f"  [warn] NaN/Inf loss skipped (data={loss_data.item():.4f} bc={L_bc.item():.4f} pde={L_pde.item():.4f} teacher={L_teacher.item():.4f})")
                 optimizer.zero_grad()
                 continue
 
@@ -825,6 +923,12 @@ def train(args):
         save_norm_info(norm_info, phase1_dir)
         save_norm_info(norm_info, phase2_dir)
 
+        teacher_bundle = None
+        if args.teacher_distill:
+            teacher_bundle = load_plan_a_teacher(args.teacher_model_path, device)
+            print(f"PlanA teacher distillation ON: weight={args.teacher_weight}, "
+                  f"scale=[{args.teacher_power_min}, {args.teacher_power_max}]")
+
         dl_tr_phase1 = DataLoader(ds_tr_phase1, batch_size=args.batch_size,
                                   shuffle=True, num_workers=0)
         dl_val = DataLoader(ds_val, batch_size=args.batch_size,
@@ -856,6 +960,10 @@ def train(args):
             high_power_min=args.high_power_min,
             high_power_max=args.high_power_max,
             high_power_weight=args.high_power_weight,
+            teacher_bundle=teacher_bundle,
+            teacher_weight=args.teacher_weight if args.teacher_distill else 0.0,
+            teacher_power_min=args.teacher_power_min,
+            teacher_power_max=args.teacher_power_max,
         )
 
         ckpt_phase1 = torch.load(phase1_result['best_path'], map_location=device)
@@ -914,6 +1022,10 @@ def train(args):
             high_power_min=args.high_power_min,
             high_power_max=args.high_power_max,
             high_power_weight=args.high_power_weight,
+            teacher_bundle=teacher_bundle,
+            teacher_weight=args.teacher_weight if args.teacher_distill else 0.0,
+            teacher_power_min=args.teacher_power_min,
+            teacher_power_max=args.teacher_power_max,
         )
 
         best_ckpt = torch.load(phase2_result['best_path'], map_location=device)
@@ -999,6 +1111,12 @@ def train(args):
     }
     save_norm_info(norm_info, args.out_dir)
 
+    teacher_bundle = None
+    if args.teacher_distill:
+        teacher_bundle = load_plan_a_teacher(args.teacher_model_path, device)
+        print(f"PlanA teacher distillation ON: weight={args.teacher_weight}, "
+              f"scale=[{args.teacher_power_min}, {args.teacher_power_max}]")
+
     dl_tr  = DataLoader(ds_tr,  batch_size=args.batch_size, shuffle=True,  num_workers=0)
     dl_val = DataLoader(ds_val, batch_size=args.batch_size, shuffle=False, num_workers=0)
     dl_te  = DataLoader(ds_te,  batch_size=args.batch_size, shuffle=False, num_workers=0)
@@ -1027,6 +1145,10 @@ def train(args):
         high_power_min=args.high_power_min,
         high_power_max=args.high_power_max,
         high_power_weight=args.high_power_weight,
+        teacher_bundle=teacher_bundle,
+        teacher_weight=args.teacher_weight if args.teacher_distill else 0.0,
+        teacher_power_min=args.teacher_power_min,
+        teacher_power_max=args.teacher_power_max,
     )
 
     best_ckpt = torch.load(phase_result['best_path'], map_location=device)
@@ -1323,6 +1445,18 @@ def parse_args():
                    help='高功率loss加权scale上界（约9组件）')
     p.add_argument('--high-power-weight', type=float, default=1.5,
                    help='高功率loss权重')
+    # PlanA teacher distillation
+    p.add_argument('--teacher-distill', action='store_true',
+                   help='启用PlanA teacher蒸馏，只约束6/7/8对应的中功率区间')
+    p.add_argument('--teacher-model-path', type=str,
+                   default='model_v3/results_plan_a_physics/plan_a_physics_model.pth',
+                   help='PlanA+Physics teacher checkpoint路径')
+    p.add_argument('--teacher-weight', type=float, default=0.5,
+                   help='PlanA teacher蒸馏loss权重')
+    p.add_argument('--teacher-power-min', type=float, default=1.10,
+                   help='teacher蒸馏scale下界，只对该区间样本生效')
+    p.add_argument('--teacher-power-max', type=float, default=1.60,
+                   help='teacher蒸馏scale上界，只对该区间样本生效')
     # 两阶段训练
     p.add_argument('--two-phase',         action='store_true',
                    help='两阶段训练：Phase1 原始数据；Phase2 冻结主干后高功率微调')
