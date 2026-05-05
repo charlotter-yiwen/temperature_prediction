@@ -655,6 +655,9 @@ def load_plan_a_teacher(model_path, device):
             elif k not in ('grid_x', 'grid_y'):
                 new_sd[k] = v
         sd = new_sd
+    # Filter out physics-wrapper-only buffers that don't belong to SetFNOModel
+    extra_keys = {'lap_kernel', 'interior_mask'}
+    sd = {k: v for k, v in sd.items() if k not in extra_keys}
     teacher.load_state_dict(sd)
     teacher.eval()
     for p in teacher.parameters():

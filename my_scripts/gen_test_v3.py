@@ -29,6 +29,7 @@ TEST_CONFIGS = [
     (7,  [2.5]*7,                           "7-Component (17.5W)"),
     (8,  [2.5]*8,                           "8-Component (20.0W)"),
     (9,  [2.5]*8 + [10.0],                  "9-Component (30.0W)"),
+    (10, [2.5]*9 + [10.0],                  "10-Component (32.5W)"),
 ]
 
 MODEL_PATH = os.path.join(TP_DIR, "my_scripts", "results_v3_poweraug_fixed", "setfno_v3_best.pth")
@@ -59,8 +60,9 @@ def load_gen_samples(n_comp, powers, gen_dir):
             x, y = int(nums[i]), int(nums[i + 1])
             positions.append([x, y, powers[len(positions)]])
 
-        # 填入 MAX_COMP_REF 大小的 params 矩阵（其余 NaN）
-        p = np.full((MAX_COMP_REF, 3), np.nan, dtype=np.float32)
+        # 填入 max(MAX_COMP_REF, n_comp) 大小的 params 矩阵（其余 NaN）
+        pad_size = max(MAX_COMP_REF, n_comp)
+        p = np.full((pad_size, 3), np.nan, dtype=np.float32)
         for j, pos in enumerate(positions):
             p[j] = pos
 
