@@ -1,0 +1,5 @@
+Starting training, logging to my_scripts/results_v3_3ch_balanced_log.txt
+Traceback (most recent call last):
+  File "C:\Users\mkale\Desktop\hou_capita\temperature_prediction\run_training.py", line 49, in <module>
+    from my_scripts.train_setfno_v3_3ch import parse_args, train, test_only
+ImportError: cannot import name 'parse_args' from 'my_scripts.train_setfno_v3_3ch' (C:\Users\mkale\Desktop\hou_capita\temperature_prediction\my_scripts\train_setfno_v3_3ch.py)

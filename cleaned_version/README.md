@@ -7,103 +7,93 @@ cleaned_version/
 ├── models/
 │   ├── shared/                    # Shared model architectures
 │   │   └── set_fno_thermal.py     # SetFNO model definition
-│   ├── v1/                        # Version 1: PINN-based models (March 2026)
-│   │   ├── train_pinn_physics_fix.py
-│   │   ├── train_plan_a_physics.py
-│   │   ├── train_plan_a_physics_v2.py
-│   │   ├── predict_pinn_gen_physics_fix.py
-│   │   ├── predict_plan_a_physics_gen.py
-│   │   └── plot_gen_comparison.py
-│   └── v2/                        # Version 2: SetFNO models (April 2026)
-│       ├── train_setfno_30w.py    # Main training script for 30W dataset
-│       ├── train_pinn_30w.py
-│       ├── train_pinn_phase2.py
-│       ├── pinn_v3_physics_fix.py
-│       └── test_generalization.py
+│   ├── v1/                        # V1: PINN-based models (March 2026)
+│   ├── v2/                        # V2: SetFNO models (April 2026)
+│   └── v3/                        # V3: SetFNO V3 2ch/3ch (May 2026)
+│       ├── train_setfno_v3.py         # V3 2-channel training
+│       ├── train_setfno_v3_3ch.py     # V3 3-channel training (latest)
+│       ├── gen_test_v3.py             # Generalization test 6-10 comp
+│       ├── gen_test_plan_a.py         # PlanA distill generalization test
+│       └── generate_random_10comp.py  # Generate 10-component test data
 │
 ├── data/
-│   ├── v1/                        # Version 1 data (1-5 components)
-│   │   ├── training/              # 342 JSON files
-│   │   ├── test/
-│   │   └── validation/
-│   └── v2/                        # Version 2 data (30W JSON format)
+│   ├── v1/                        # V1 data (1-5 components)
+│   │   └── training/              # 342 JSON files
+│   └── v2/                        # V2 data (30W JSON format)
 │       ├── training/              # 600 JSON files (1-5 components)
 │       └── generalization/        # 180 JSON files (6-8 components)
 │
 ├── outputs/
 │   ├── v1/
 │   │   ├── model_v3/              # Model v3 training results
-│   │   │   ├── results_bc_0_0005_10k/
-│   │   │   └── results_plan_a_physics/
-│   │   └── hp_search/             # Hyperparameter search results
-│   │       ├── plan_a_balanced/   # Best v1 model (42.8M params)
-│   │       ├── plan_b_transfomer/
-│   │       ├── plan_c_fno/
-│   │       └── ...
-│   └── v2/
-│       └── model_30w/             # Model 30W training results
-│           ├── results_setfno_phase2/  # Best v2 model
-│           ├── generalization_results/
-│           └── ...
+│   │   └── hp_search/             # Hyperparameter search (16 experiments)
+│   ├── v2/
+│   │   └── model_30w/             # Model 30W results + generalization
+│   └── v3/                        # V3 results (10 experiment variants)
+│       ├── results_v3/            # Base V3
+│       ├── results_v3_3ch_balanced/   # 3ch balanced (R²=0.9898)
+│       ├── results_v3_poweraug_fixed/ # Power augmentation (fixed)
+│       ├── results_v3_targeted_aug/   # Targeted augmentation
+│       ├── results_v3_two_phase/      # Two-phase training
+│       ├── results_v3_distill/        # Teacher distillation
+│       └── ...                        # More variants
 │
 ├── my_scripts/
-│   ├── v1/                        # Version 1 utility scripts
-│   │   ├── compare_methods.py
-│   │   ├── generate_random_6comp.py
-│   │   ├── generate_random_9comp.py
-│   │   ├── predict_7comp.py
-│   │   ├── predict_8comp.py
-│   │   └── ...
-│   ├── v2/                        # Version 2 utility scripts
-│   │   ├── generate_1to5comp_random_power.py
-│   │   ├── simulate_copper_via_temp.py
-│   │   ├── visualize_copper_via.py
-│   │   └── ...
-│   └── IEEE_Writing_Style/        # IEEE paper template
+│   ├── v1/                        # V1 utility scripts
+│   ├── v2/                        # V2 utility scripts (copper via etc.)
+│   └── v3/                        # V3 utility scripts
+│       ├── run_training.py            # Training wrapper
+│       └── run_3ch_balanced.bat       # Batch launcher
 │
 ├── simulation/
-│   └── thermal_prediction.py      # Thermal simulation code
-│
+│   └── thermal_prediction.py
 ├── preprocessing/
-│   └── process_json_to_grid.py    # Data preprocessing
-│
+│   └── process_json_to_grid.py
 └── scripts/
-    └── *.ps1                      # PowerShell scripts
 ```
 
-## Version Differences
+## Version Comparison
 
-| Feature | v1 (March 2026) | v2 (April 2026) |
-|---------|-----------------|-----------------|
-| Model | PINN-based | SetFNO (SetTransformer + FNO) |
-| Parameters | 5.7M - 42.8M | 42.8M |
-| Training Data | 1-5 components | 1-5 components (30W format) |
-| Power Range | 2.5-13.7W | 2.5-6W per component |
-| Data Format | NumPy | JSON |
-| Generalization | 6-9 components | 6-8 components |
+| Feature | v1 (March) | v2 (April) | v3 (May) |
+|---------|-----------|-----------|----------|
+| Model | PINN | SetFNO | SetFNO V3 (2ch/3ch) |
+| Parameters | 5.7-42.8M | 42.8M | 32.6M |
+| Input | Coordinates + power | Coordinates + power | Heat source map + grid |
+| Key Innovation | Physics loss | Physics norm | Power aug, distillation |
+| Training Data | 1-5 comp | 1-5 comp (30W) | 1-5 comp + augmented |
+| Generalization | 6-9 comp | 6-8 comp | 6-10 comp |
 
-## Best Models
+## Best Results per Version
 
 ### v1: Plan A Balanced + Physics Loss
-- Location: `outputs/v1/model_v3/results_plan_a_physics/`
-- Parameters: 42.8M
-- Generalization R²: 6-comp=0.92, 7-comp=0.91, 8-comp=0.90, 9-comp=0.44
+- Location: `outputs/v1/hp_search/plan_a_balanced/`
+- 6-comp R²=0.91, 7-comp=0.88, 8-comp=0.86
 
 ### v2: SetFNO Phase 2
 - Location: `outputs/v2/model_30w/results_setfno_phase2/`
-- Parameters: 42.8M
-- Generalization R²: 6-comp=0.93, 7-comp=0.93, 8-comp=0.91
+- 6-comp R²=0.93, 7-comp=0.93, 8-comp=0.91
+
+### v3: Distillation (Best V3 so far)
+- Location: `outputs/v3/results_v3_distill/`
+- 6-comp R²=0.90, 7-comp=0.87, 8-comp=0.84, 9-comp=0.88, 10-comp=0.74
+- 3ch Balanced training R²=0.9898 (on training data)
 
 ## Usage
 
-### Training v2 Model
+### Training V3 Model
+```bash
+cd models/v3
+python train_setfno_v3_3ch.py --epochs 2000 --batch-size 32 --lr 5e-5
+```
+
+### Testing V3 Generalization
+```bash
+cd models/v3
+python gen_test_v3.py --model-path ../../outputs/v3/results_v3_distill/setfno_v3.pth
+```
+
+### Training V2 Model (30W)
 ```bash
 cd models/v2
 python train_setfno_30w.py --data-dir ../../data/v2/training --epochs 2000 --physics-norm
-```
-
-### Testing Generalization
-```bash
-cd models/v2
-python test_generalization.py --model-path ../../outputs/v2/model_30w/results_setfno_phase2/setfno_30w_phase2.pth --data-dir ../../data/v2/generalization --component-count 6
 ```
