@@ -1,0 +1,114 @@
+[
+  {
+    "complexity": "1",
+    "loss": "0.11829218",
+    "equation": "3.20701",
+    "score": "0.0",
+    "sympy_format": "3.20701000000000",
+    "lambda_format": "PySRFunction(X=>3.20701000000000)"
+  },
+  {
+    "complexity": "3",
+    "loss": "0.0342347",
+    "equation": "3.676935 - r",
+    "score": "0.6199589580495206",
+    "sympy_format": "3.676935 - r",
+    "lambda_format": "PySRFunction(X=>3.676935 - r)"
+  },
+  {
+    "complexity": "5",
+    "loss": "0.017117618",
+    "equation": "2.7316575 - (log_r * 0.52871615)",
+    "score": "0.34656576202670814",
+    "sympy_format": "2.7316575 - 0.52871615*log_r",
+    "lambda_format": "PySRFunction(X=>2.7316575 - 0.52871615*log_r)"
+  },
+  {
+    "complexity": "7",
+    "loss": "0.0072157234",
+    "equation": "((log_r / -1.6724663) - min_pixel_source_edge) + 2.7925737",
+    "score": "0.4319228874896345",
+    "sympy_format": "log_r/(-1.6724663) - min_pixel_source_edge + 2.7925737",
+    "lambda_format": "PySRFunction(X=>log_r/(-1.6724663) - min_pixel_source_edge + 2.7925737)"
+  },
+  {
+    "complexity": "9",
+    "loss": "0.005600246",
+    "equation": "((log_r / (-1.4385831 - pixel_edge)) + 2.7771275) - min_pixel_source_edge",
+    "score": "0.12672596259618213",
+    "sympy_format": "log_r/(-pixel_edge - 1.4385831) - min_pixel_source_edge + 2.7771275",
+    "lambda_format": "PySRFunction(X=>log_r/(-pixel_edge - 1.4385831) - min_pixel_source_edge + 2.7771275)"
+  },
+  {
+    "complexity": "11",
+    "loss": "0.004486599",
+    "equation": "((min_pixel_source_edge + log_r) / ((-1.2884483 - source_edge) - pixel_edge)) + 2.7490396",
+    "score": "0.11085778581829225",
+    "sympy_format": "(log_r + min_pixel_source_edge)/(-pixel_edge - source_edge - 1.2884483) + 2.7490396",
+    "lambda_format": "PySRFunction(X=>(log_r + min_pixel_source_edge)/(-pixel_edge - source_edge - 1.2884483) + 2.7490396)"
+  },
+  {
+    "complexity": "13",
+    "loss": "0.0036712545",
+    "equation": "2.7551675 + ((log_r / (-1.1319091 - ((r_source_edge - -0.019637961) / r))) - pixel_edge)",
+    "score": "0.1002807622203115",
+    "sympy_format": "log_r/(-1.1319091 - (r_source_edge - 1*(-0.019637961))/r) - pixel_edge + 2.7551675",
+    "lambda_format": "PySRFunction(X=>log_r/(-1.1319091 - (r_source_edge - 1*(-0.019637961))/r) - pixel_edge + 2.7551675)"
+  },
+  {
+    "complexity": "15",
+    "loss": "0.0024310425",
+    "equation": "((min_pixel_source_edge + log_r) / ((-1.061964 - ((r_source_edge - -0.016502058) / r)) - pixel_edge)) + 2.7053635",
+    "score": "0.2061066257859208",
+    "sympy_format": "(log_r + min_pixel_source_edge)/(-pixel_edge - 1.061964 - (r_source_edge - 1*(-0.016502058))/r) + 2.7053635",
+    "lambda_format": "PySRFunction(X=>(log_r + min_pixel_source_edge)/(-pixel_edge - 1.061964 - (r_source_edge - 1*(-0.016502058))/r) + 2.7053635)"
+  },
+  {
+    "complexity": "17",
+    "loss": "0.0022335974",
+    "equation": "((min_pixel_source_edge + log_r) / ((-1.0418789 - (((r_source_edge - -0.017753774) / r) + r_pixel_edge)) - pixel_edge)) + 2.717048",
+    "score": "0.04235335407676361",
+    "sympy_format": "(log_r + min_pixel_source_edge)/(-pixel_edge - (r_pixel_edge + (r_source_edge - 1*(-0.017753774))/r) - 1.0418789) + 2.717048",
+    "lambda_format": "PySRFunction(X=>(log_r + min_pixel_source_edge)/(-pixel_edge - (r_pixel_edge + (r_source_edge - 1*(-0.017753774))/r) - 1.0418789) + 2.717048)"
+  },
+  {
+    "complexity": "19",
+    "loss": "0.002226674",
+    "equation": "((log_r + min_pixel_source_edge) / (((-1.0360644 - ((r_source_edge - -0.018324515) / r)) - pixel_edge) + (r_pixel_edge * -1.2711083))) + 2.7209654",
+    "score": "0.0015522386284645526",
+    "sympy_format": "(log_r + min_pixel_source_edge)/(-pixel_edge + r_pixel_edge*(-1.2711083) - 1.0360644 - (r_source_edge - 1*(-0.018324515))/r) + 2.7209654",
+    "lambda_format": "PySRFunction(X=>(log_r + min_pixel_source_edge)/(-pixel_edge + r_pixel_edge*(-1.2711083) - 1.0360644 - (r_source_edge - 1*(-0.018324515))/r) + 2.7209654)"
+  },
+  {
+    "complexity": "21",
+    "loss": "0.002201327",
+    "equation": "2.716324 + (((min_pixel_source_edge + log_r) / ((-1.0601518 - ((r_source_edge - -0.017218573) / r)) - pixel_edge)) + (pixel_edge2 * (pixel_edge2 - r)))",
+    "score": "0.0057243159733888025",
+    "sympy_format": "pixel_edge2*(pixel_edge2 - r) + (log_r + min_pixel_source_edge)/(-pixel_edge - 1.0601518 - (r_source_edge - 1*(-0.017218573))/r) + 2.716324",
+    "lambda_format": "PySRFunction(X=>pixel_edge2*(pixel_edge2 - r) + (log_r + min_pixel_source_edge)/(-pixel_edge - 1.0601518 - (r_source_edge - 1*(-0.017218573))/r) + 2.716324)"
+  },
+  {
+    "complexity": "23",
+    "loss": "0.0021773071",
+    "equation": "((min_pixel_source_edge + log_r) / (((((-0.21077889 - r2) / 0.26207393) * r_pixel_edge) - pixel_edge) + (-1.0604968 - ((r_source_edge - -0.017666923) / r)))) + 2.7310183",
+    "score": "0.005485761175555331",
+    "sympy_format": "(log_r + min_pixel_source_edge)/(-pixel_edge + r_pixel_edge*(-r2 - 0.21077889)/0.26207393 - 1.0604968 - (r_source_edge - 1*(-0.017666923))/r) + 2.7310183",
+    "lambda_format": "PySRFunction(X=>(log_r + min_pixel_source_edge)/(-pixel_edge + r_pixel_edge*(-r2 - 0.21077889)/0.26207393 - 1.0604968 - (r_source_edge - 1*(-0.017666923))/r) + 2.7310183)"
+  },
+  {
+    "complexity": "25",
+    "loss": "0.0021623783",
+    "equation": "((log_r + min_pixel_source_edge) / ((-1.0543035 - ((r_source_edge - -0.018149506) / r)) + ((r_pixel_edge * (-0.573195 - ((r2 + r_source_edge) / 0.25725678))) - pixel_edge))) + 2.7297046",
+    "score": "0.003440078603346165",
+    "sympy_format": "(log_r + min_pixel_source_edge)/(-pixel_edge + r_pixel_edge*(-(r2 + r_source_edge)/0.25725678 - 0.573195) - 1.0543035 - (r_source_edge - 1*(-0.018149506))/r) + 2.7297046",
+    "lambda_format": "PySRFunction(X=>(log_r + min_pixel_source_edge)/(-pixel_edge + r_pixel_edge*(-(r2 + r_source_edge)/0.25725678 - 0.573195) - 1.0543035 - (r_source_edge - 1*(-0.018149506))/r) + 2.7297046)"
+  },
+  {
+    "complexity": "27",
+    "loss": "0.002106678",
+    "equation": "(((log_r + min_pixel_source_edge) / ((-1.0530715 - ((r_source_edge - -0.01771258) / r)) - pixel_edge)) + 2.7197587) + (pixel_edge2 * (((pixel_edge + -0.9836004) + min_pixel_source_edge) - (log_r * pixel_edge2)))",
+    "score": "0.013048190780296778",
+    "sympy_format": "pixel_edge2*(-log_r*pixel_edge2 + min_pixel_source_edge + pixel_edge - 0.9836004) + (log_r + min_pixel_source_edge)/(-pixel_edge - 1.0530715 - (r_source_edge - 1*(-0.01771258))/r) + 2.7197587",
+    "lambda_format": "PySRFunction(X=>pixel_edge2*(-log_r*pixel_edge2 + min_pixel_source_edge + pixel_edge - 0.9836004) + (log_r + min_pixel_source_edge)/(-pixel_edge - 1.0530715 - (r_source_edge - 1*(-0.01771258))/r) + 2.7197587)"
+  }
+]

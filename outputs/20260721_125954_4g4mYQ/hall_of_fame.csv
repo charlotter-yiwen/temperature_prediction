@@ -1,0 +1,6 @@
+Complexity,Loss,Equation
+1,196.25946,"53.168564"
+3,98.52735,"18.852495 / P_max_ratio"
+5,27.327166,"(n_active * n_active) - -42.328167"
+7,23.083567,"((n_active * n_active) - -41.525066) + pairwise_inv"
+11,2.609565,"(power_std + power_mean) * (((P_total - -15.532864) - power_std) / 1.2158687)"

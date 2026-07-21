@@ -1,0 +1,107 @@
+{
+  "target": "theta",
+  "formula": "delta_T = intercept + sum_j coefficient_j * feature_j",
+  "intercept": 2.19409776444739,
+  "terms": [
+    {
+      "name": "1",
+      "coefficient": 0.0
+    },
+    {
+      "name": "edge",
+      "coefficient": -1.1516642716082894
+    },
+    {
+      "name": "edge^2",
+      "coefficient": 2.372921051430255
+    },
+    {
+      "name": "sum_i w_i/(r_i+eps)",
+      "coefficient": -0.09948994423690052
+    },
+    {
+      "name": "sum_i w_i/(r_i^2+eps^2)",
+      "coefficient": 0.0005113159458118537
+    },
+    {
+      "name": "sum_i w_i*log(r_i+eps)",
+      "coefficient": -1.2019192557608311
+    },
+    {
+      "name": "sum_i w_i*r_i",
+      "coefficient": 0.7280109167368486
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.03^2))",
+      "coefficient": 0.9970139541495662
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": -1.1697040878886316
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": -0.255109264658201
+    },
+    {
+      "name": "edge*sum_i w_i/(r_i+eps)",
+      "coefficient": -0.004489798930818438
+    },
+    {
+      "name": "edge*sum_i w_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": 4.643461330316791
+    },
+    {
+      "name": "sum_i w_i*s_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": -3.091394311886949
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.015^2))",
+      "coefficient": 1.8541140202558508
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.020^2))",
+      "coefficient": -0.9295802296691041
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.040^2))",
+      "coefficient": 0.45946396758615937
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.080^2))",
+      "coefficient": 1.5860362369333834
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.140^2))",
+      "coefficient": -0.5217439615318946
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.200^2))",
+      "coefficient": 0.649358970670877
+    },
+    {
+      "name": "edge*sum_i w_i*exp(-r_i^2/(2*0.040^2))",
+      "coefficient": -1.2037430692419913
+    },
+    {
+      "name": "edge*sum_i w_i*exp(-r_i^2/(2*0.080^2))",
+      "coefficient": -2.9465180580631443
+    },
+    {
+      "name": "edge*sum_i w_i*exp(-r_i^2/(2*0.140^2))",
+      "coefficient": 4.828150058360187
+    },
+    {
+      "name": "edge*sum_i w_i*exp(-r_i^2/(2*0.200^2))",
+      "coefficient": -4.215191891809473
+    }
+  ],
+  "regressor": "RidgeCV",
+  "alpha": 0.02511886431509577,
+  "eps_norm": 0.01,
+  "feature_notes": {
+    "r_i": "normalized distance from query pixel (x,y) to component i",
+    "edge": "normalized distance from query pixel to closest board edge",
+    "s_i": "normalized distance from component i to closest board edge"
+  }
+}

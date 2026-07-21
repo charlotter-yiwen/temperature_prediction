@@ -1,0 +1,34 @@
+[
+  {
+    "complexity": "1",
+    "loss": "0.0515773",
+    "equation": "3.2185597",
+    "score": "0.0",
+    "sympy_format": "3.21855970000000",
+    "lambda_format": "PySRFunction(X=>3.21855970000000)"
+  },
+  {
+    "complexity": "3",
+    "loss": "0.03176014",
+    "equation": "g080 + 3.1767924",
+    "score": "0.24243480439147022",
+    "sympy_format": "g080 + 3.1767924",
+    "lambda_format": "PySRFunction(X=>g080 + 3.1767924)"
+  },
+  {
+    "complexity": "4",
+    "loss": "0.024087662",
+    "equation": "exp(g100) + 2.1465757",
+    "score": "0.27651228523178334",
+    "sympy_format": "exp(g100) + 2.1465757",
+    "lambda_format": "PySRFunction(X=>exp(g100) + 2.1465757)"
+  },
+  {
+    "complexity": "8",
+    "loss": "0.014080647",
+    "equation": "((sqrt(g200) + -0.6769754) - 0.041116025) + 3.5208325",
+    "score": "0.13422461445479875",
+    "sympy_format": "sqrt(g200) + 2.802741075",
+    "lambda_format": "PySRFunction(X=>sqrt(g200) + 2.802741075)"
+  }
+]

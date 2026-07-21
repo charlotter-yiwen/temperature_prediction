@@ -1,0 +1,135 @@
+{
+  "target": "theta",
+  "formula": "delta_T = intercept + sum_j coefficient_j * feature_j",
+  "intercept": 2.9459884139167873,
+  "terms": [
+    {
+      "name": "1",
+      "coefficient": 0.0
+    },
+    {
+      "name": "P_total",
+      "coefficient": -0.010664393694979601
+    },
+    {
+      "name": "n_active",
+      "coefficient": -0.04650727623560268
+    },
+    {
+      "name": "edge",
+      "coefficient": -1.128793341859521
+    },
+    {
+      "name": "edge^2",
+      "coefficient": 1.6921092213325828
+    },
+    {
+      "name": "P_total*n_active",
+      "coefficient": 0.00023756113407712225
+    },
+    {
+      "name": "P_total*edge",
+      "coefficient": 0.021117337580076605
+    },
+    {
+      "name": "P_total*edge^2",
+      "coefficient": 0.02224707172440059
+    },
+    {
+      "name": "sum_i P_i/(r_i+eps)",
+      "coefficient": 0.0025499416751717796
+    },
+    {
+      "name": "sum_i P_i/(r_i^2+eps^2)",
+      "coefficient": -4.988680983448328e-05
+    },
+    {
+      "name": "sum_i P_i*log(r_i+eps)",
+      "coefficient": -0.004112321524164266
+    },
+    {
+      "name": "sum_i P_i*r_i",
+      "coefficient": 0.031731302485972245
+    },
+    {
+      "name": "sum_i P_i*exp(-r_i^2/(2*0.03^2))",
+      "coefficient": 0.04594094052691603
+    },
+    {
+      "name": "sum_i P_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": -0.036530646256075126
+    },
+    {
+      "name": "sum_i P_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": 0.04258785439766476
+    },
+    {
+      "name": "edge*sum_i P_i/(r_i+eps)",
+      "coefficient": -0.006994622122602575
+    },
+    {
+      "name": "edge*sum_i P_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": 0.31691967884470246
+    },
+    {
+      "name": "sum_i P_i*s_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": -0.1811241982021674
+    },
+    {
+      "name": "n_active*sum_i P_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": -0.0073133865738364435
+    },
+    {
+      "name": "sum_i w_i/(r_i+eps)",
+      "coefficient": 0.04986205183087239
+    },
+    {
+      "name": "sum_i w_i/(r_i^2+eps^2)",
+      "coefficient": 0.00014449910964160322
+    },
+    {
+      "name": "sum_i w_i*log(r_i+eps)",
+      "coefficient": -0.49195734077689285
+    },
+    {
+      "name": "sum_i w_i*r_i",
+      "coefficient": -0.24398271597522764
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.03^2))",
+      "coefficient": -1.7621823258782716
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": -0.9082231115094088
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": 0.19738705602111836
+    },
+    {
+      "name": "edge*sum_i w_i/(r_i+eps)",
+      "coefficient": -0.09562565977858947
+    },
+    {
+      "name": "edge*sum_i w_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": 3.6625168971455873
+    },
+    {
+      "name": "sum_i w_i*s_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": -2.3662621896534732
+    },
+    {
+      "name": "n_active*sum_i w_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": 0.0065110417435121255
+    }
+  ],
+  "regressor": "RidgeCV",
+  "alpha": 3.981071705534969,
+  "eps_norm": 0.01,
+  "feature_notes": {
+    "r_i": "normalized distance from query pixel (x,y) to component i",
+    "edge": "normalized distance from query pixel to closest board edge",
+    "s_i": "normalized distance from component i to closest board edge"
+  }
+}

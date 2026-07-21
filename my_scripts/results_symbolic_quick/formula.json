@@ -1,0 +1,83 @@
+{
+  "target": "delta_T = T - T_amb",
+  "formula": "delta_T = intercept + sum_j coefficient_j * feature_j",
+  "intercept": 0.08893818189884684,
+  "terms": [
+    {
+      "name": "1",
+      "coefficient": 0.0
+    },
+    {
+      "name": "P_total",
+      "coefficient": 2.1460197671993733
+    },
+    {
+      "name": "n_active",
+      "coefficient": 0.33625860622174353
+    },
+    {
+      "name": "P_total*n_active",
+      "coefficient": 0.012517756320684957
+    },
+    {
+      "name": "P_total*edge",
+      "coefficient": -0.8458857341777976
+    },
+    {
+      "name": "P_total*edge^2",
+      "coefficient": 1.7818723065144058
+    },
+    {
+      "name": "sum_i P_i/(r_i+eps)",
+      "coefficient": 0.05702932502672647
+    },
+    {
+      "name": "sum_i P_i/(r_i^2+eps^2)",
+      "coefficient": -0.0002574354236628116
+    },
+    {
+      "name": "sum_i P_i*log(r_i+eps)",
+      "coefficient": -0.7750038886918026
+    },
+    {
+      "name": "sum_i P_i*r_i",
+      "coefficient": 0.4634861565762328
+    },
+    {
+      "name": "sum_i P_i*exp(-r_i^2/(2*0.03^2))",
+      "coefficient": -1.1162879378806365
+    },
+    {
+      "name": "sum_i P_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": -1.362488529883774
+    },
+    {
+      "name": "sum_i P_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": 0.4317616845788428
+    },
+    {
+      "name": "edge*sum_i P_i/(r_i+eps)",
+      "coefficient": -0.17168914881895664
+    },
+    {
+      "name": "edge*sum_i P_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": 7.305217244135377
+    },
+    {
+      "name": "sum_i P_i*s_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": -4.197922083217138
+    },
+    {
+      "name": "n_active*sum_i P_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": -0.044928565344962965
+    }
+  ],
+  "regressor": "RidgeCV",
+  "alpha": 0.13593563908785242,
+  "eps_norm": 0.01,
+  "feature_notes": {
+    "r_i": "normalized distance from query pixel (x,y) to component i",
+    "edge": "normalized distance from query pixel to closest board edge",
+    "s_i": "normalized distance from component i to closest board edge"
+  }
+}

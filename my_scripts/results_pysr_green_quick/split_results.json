@@ -1,0 +1,20 @@
+{
+  "val": {
+    "label": "pysr_green_val",
+    "n_cases": 27,
+    "r2_all_pixels": 0.9968798756599426,
+    "r2_per_sample_mean": 0.7171558516996878,
+    "r2_per_sample_std": 0.18980654577718808,
+    "r2_per_sample_min": 0.20399290323257446,
+    "r2_per_sample_max": 0.9423432946205139
+  },
+  "test": {
+    "label": "pysr_green_test",
+    "n_cases": 30,
+    "r2_all_pixels": 0.997317373752594,
+    "r2_per_sample_mean": 0.7609377384185791,
+    "r2_per_sample_std": 0.1783873809414214,
+    "r2_per_sample_min": 0.14982300996780396,
+    "r2_per_sample_max": 0.9548288583755493
+  }
+}

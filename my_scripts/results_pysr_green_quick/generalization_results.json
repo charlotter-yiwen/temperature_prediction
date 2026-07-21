@@ -1,0 +1,47 @@
+{
+  "6-Component (15.7W)": {
+    "label": "pysr_gen_6-Component (15.7W)",
+    "n_cases": 1,
+    "r2_all_pixels": 0.47120630741119385,
+    "r2_per_sample_mean": 0.47120630741119385,
+    "r2_per_sample_std": 0.0,
+    "r2_per_sample_min": 0.47120630741119385,
+    "r2_per_sample_max": 0.47120630741119385
+  },
+  "7-Component (17.5W)": {
+    "label": "pysr_gen_7-Component (17.5W)",
+    "n_cases": 1,
+    "r2_all_pixels": -0.20805490016937256,
+    "r2_per_sample_mean": -0.20805490016937256,
+    "r2_per_sample_std": 0.0,
+    "r2_per_sample_min": -0.20805490016937256,
+    "r2_per_sample_max": -0.20805490016937256
+  },
+  "8-Component (20.0W)": {
+    "label": "pysr_gen_8-Component (20.0W)",
+    "n_cases": 1,
+    "r2_all_pixels": -0.9274442195892334,
+    "r2_per_sample_mean": -0.9274442195892334,
+    "r2_per_sample_std": 0.0,
+    "r2_per_sample_min": -0.9274442195892334,
+    "r2_per_sample_max": -0.9274442195892334
+  },
+  "9-Component (30.0W)": {
+    "label": "pysr_gen_9-Component (30.0W)",
+    "n_cases": 1,
+    "r2_all_pixels": -2.4474411010742188,
+    "r2_per_sample_mean": -2.4474411010742188,
+    "r2_per_sample_std": 0.0,
+    "r2_per_sample_min": -2.4474411010742188,
+    "r2_per_sample_max": -2.4474411010742188
+  },
+  "10-Component (32.5W)": {
+    "label": "pysr_gen_10-Component (32.5W)",
+    "n_cases": 1,
+    "r2_all_pixels": -2.63582444190979,
+    "r2_per_sample_mean": -2.63582444190979,
+    "r2_per_sample_std": 0.0,
+    "r2_per_sample_min": -2.63582444190979,
+    "r2_per_sample_max": -2.63582444190979
+  }
+}

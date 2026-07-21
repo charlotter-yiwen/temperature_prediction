@@ -1,0 +1,98 @@
+[
+  {
+    "complexity": "1",
+    "loss": "0.05645748",
+    "equation": "3.2058308",
+    "score": "0.0",
+    "sympy_format": "3.20583080000000",
+    "lambda_format": "PySRFunction(X=>3.20583080000000)"
+  },
+  {
+    "complexity": "3",
+    "loss": "0.014668545",
+    "equation": "g200 + 3.0047743",
+    "score": "0.6738911916142739",
+    "sympy_format": "g200 + 3.0047743",
+    "lambda_format": "PySRFunction(X=>g200 + 3.0047743)"
+  },
+  {
+    "complexity": "5",
+    "loss": "0.011863992",
+    "equation": "(log_r * -0.47906494) + 2.7790787",
+    "score": "0.10609873735268498",
+    "sympy_format": "2.7790787 + log_r*(-0.47906494)",
+    "lambda_format": "PySRFunction(X=>2.7790787 + log_r*(-0.47906494))"
+  },
+  {
+    "complexity": "7",
+    "loss": "0.0065314807",
+    "equation": "(log_r * (edge + -0.776423)) + 2.688052",
+    "score": "0.2984371297486359",
+    "sympy_format": "log_r*(edge - 0.776423) + 2.688052",
+    "lambda_format": "PySRFunction(X=>log_r*(edge - 0.776423) + 2.688052)"
+  },
+  {
+    "complexity": "9",
+    "loss": "0.0048817704",
+    "equation": "((src_edge_wmean2 + -0.6883258) * log_r) + (2.8218799 - edge)",
+    "score": "0.14556286503512356",
+    "sympy_format": "-edge + log_r*(src_edge_wmean2 - 0.6883258) + 2.8218799",
+    "lambda_format": "PySRFunction(X=>-edge + log_r*(src_edge_wmean2 - 0.6883258) + 2.8218799)"
+  },
+  {
+    "complexity": "11",
+    "loss": "0.004064427",
+    "equation": "(log_r * (src_edge_wmean2 + -0.72123086)) + (2.7979984 - (g030 + edge))",
+    "score": "0.09161758365229142",
+    "sympy_format": "log_r*(src_edge_wmean2 - 0.72123086) - (edge + g030) + 2.7979984",
+    "lambda_format": "PySRFunction(X=>log_r*(src_edge_wmean2 - 0.72123086) - (edge + g030) + 2.7979984)"
+  },
+  {
+    "complexity": "13",
+    "loss": "0.0034213485",
+    "equation": "((((src_edge_mean + -1.3184221) * 0.5468185) * (log_r - edge2)) - edge) + 2.8202817",
+    "score": "0.08611900102473301",
+    "sympy_format": "-edge + (src_edge_mean - 1.3184221)*0.5468185*(-edge2 + log_r) + 2.8202817",
+    "lambda_format": "PySRFunction(X=>-edge + (src_edge_mean - 1.3184221)*0.5468185*(-edge2 + log_r) + 2.8202817)"
+  },
+  {
+    "complexity": "15",
+    "loss": "0.0027581141",
+    "equation": "((((0.5880375 * src_edge_mean) + -0.76200604) * (log_r - (edge2 - g040))) + 2.7965388) - edge",
+    "score": "0.10774381126562739",
+    "sympy_format": "-edge + (log_r - (edge2 - g040))*(0.5880375*src_edge_mean - 0.76200604) + 2.7965388",
+    "lambda_format": "PySRFunction(X=>-edge + (log_r - (edge2 - g040))*(0.5880375*src_edge_mean - 0.76200604) + 2.7965388)"
+  },
+  {
+    "complexity": "17",
+    "loss": "0.0026405777",
+    "equation": "((((src_edge_wmean * 0.56243056) + -0.76497096) * ((log_r - (edge2 - g030)) + edge_g080)) - edge) + 2.790827",
+    "score": "0.02177471504840548",
+    "sympy_format": "-edge + (src_edge_wmean*0.56243056 - 0.76497096)*(edge_g080 + log_r - (edge2 - g030)) + 2.790827",
+    "lambda_format": "PySRFunction(X=>-edge + (src_edge_wmean*0.56243056 - 0.76497096)*(edge_g080 + log_r - (edge2 - g030)) + 2.790827)"
+  },
+  {
+    "complexity": "21",
+    "loss": "0.002568481",
+    "equation": "(((edge2 - edge) * 1.2010847) - g030) + (((log_r * -0.7905871) + 2.7878294) + ((edge_g140 - (src_edge_mean * log_r)) * -0.55804217))",
+    "score": "0.006920761348179662",
+    "sympy_format": "-g030 + log_r*(-0.7905871) + (-edge + edge2)*1.2010847 + (edge_g140 - log_r*src_edge_mean)*(-0.55804217) + 2.7878294",
+    "lambda_format": "PySRFunction(X=>-g030 + log_r*(-0.7905871) + (-edge + edge2)*1.2010847 + (edge_g140 - log_r*src_edge_mean)*(-0.55804217) + 2.7878294)"
+  },
+  {
+    "complexity": "23",
+    "loss": "0.002512168",
+    "equation": "((edge2 - edge) * 1.1868469) + (((-0.78870505 * log_r) + ((edge_g140 - (src_edge_mean * log_r)) * (edge_g040 + -0.58620507))) + (2.7928858 - g030))",
+    "score": "0.011084274116836766",
+    "sympy_format": "-g030 - 0.78870505*log_r + (-edge + edge2)*1.1868469 + (edge_g040 - 0.58620507)*(edge_g140 - log_r*src_edge_mean) + 2.7928858",
+    "lambda_format": "PySRFunction(X=>-g030 - 0.78870505*log_r + (-edge + edge2)*1.1868469 + (edge_g040 - 0.58620507)*(edge_g140 - log_r*src_edge_mean) + 2.7928858)"
+  },
+  {
+    "complexity": "25",
+    "loss": "0.0024828522",
+    "equation": "(((edge2 - edge) * 1.2909539) + ((2.8628395 - g030) + ((edge_g140 + -0.98169076) * (edge_g140 - (src_edge_wmean * (-0.5149323 - g140)))))) + (log_r * -0.7471439)",
+    "score": "0.005869072682304886",
+    "sympy_format": "-g030 + log_r*(-0.7471439) + (-edge + edge2)*1.2909539 + (edge_g140 - 0.98169076)*(edge_g140 - src_edge_wmean*(-g140 - 0.5149323)) + 2.8628395",
+    "lambda_format": "PySRFunction(X=>-g030 + log_r*(-0.7471439) + (-edge + edge2)*1.2909539 + (edge_g140 - 0.98169076)*(edge_g140 - src_edge_wmean*(-g140 - 0.5149323)) + 2.8628395)"
+  }
+]

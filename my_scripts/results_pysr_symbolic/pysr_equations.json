@@ -1,0 +1,114 @@
+[
+  {
+    "complexity": "1",
+    "loss": "0.05645748",
+    "equation": "3.2058308",
+    "score": "0.0",
+    "sympy_format": "3.20583080000000",
+    "lambda_format": "PySRFunction(X=>3.20583080000000)"
+  },
+  {
+    "complexity": "3",
+    "loss": "0.014668545",
+    "equation": "g200 + 3.0047934",
+    "score": "0.6738911916142739",
+    "sympy_format": "g200 + 3.0047934",
+    "lambda_format": "PySRFunction(X=>g200 + 3.0047934)"
+  },
+  {
+    "complexity": "4",
+    "loss": "0.014108686",
+    "equation": "sqrt(g200) + 2.8158257",
+    "score": "0.03891476914660905",
+    "sympy_format": "sqrt(g200) + 2.8158257",
+    "lambda_format": "PySRFunction(X=>sqrt(g200) + 2.8158257)"
+  },
+  {
+    "complexity": "5",
+    "loss": "0.011863991",
+    "equation": "2.7790542 - (log_r * 0.4790898)",
+    "score": "0.17328278984742537",
+    "sympy_format": "2.7790542 - 0.4790898*log_r",
+    "lambda_format": "PySRFunction(X=>2.7790542 - 0.4790898*log_r)"
+  },
+  {
+    "complexity": "6",
+    "loss": "0.010558967",
+    "equation": "sqrt(g200) + (2.8575673 - edge2)",
+    "score": "0.11653239471436803",
+    "sympy_format": "-edge2 + sqrt(g200) + 2.8575673",
+    "lambda_format": "PySRFunction(X=>-edge2 + sqrt(g200) + 2.8575673)"
+  },
+  {
+    "complexity": "7",
+    "loss": "0.0069325706",
+    "equation": "((log_r * -0.60973895) + 2.8293462) - edge",
+    "score": "0.42074476915126124",
+    "sympy_format": "-edge + log_r*(-0.60973895) + 2.8293462",
+    "lambda_format": "PySRFunction(X=>-edge + log_r*(-0.60973895) + 2.8293462)"
+  },
+  {
+    "complexity": "8",
+    "loss": "0.006747954",
+    "equation": "2.7148342 - (log_r / (exp(edge) * 1.4178483))",
+    "score": "0.026991334546407002",
+    "sympy_format": "2.7148342 - log_r/(exp(edge)*1.4178483)",
+    "lambda_format": "PySRFunction(X=>2.7148342 - log_r/(exp(edge)*1.4178483))"
+  },
+  {
+    "complexity": "9",
+    "loss": "0.0054154643",
+    "equation": "2.7148342 - (((0.9766666 - edge) * log_r) / 1.4178483)",
+    "score": "0.21998072774303015",
+    "sympy_format": "2.7148342 - log_r*(0.9766666 - edge)/1.4178483",
+    "lambda_format": "PySRFunction(X=>2.7148342 - log_r*(0.9766666 - edge)/1.4178483)"
+  },
+  {
+    "complexity": "10",
+    "loss": "0.004723425",
+    "equation": "2.7039516 - (log_r * (0.8247462 - (sqrt(edge) / 1.5948668)))",
+    "score": "0.13672444803837092",
+    "sympy_format": "-log_r*(0.8247462 - 0.627011609997775*sqrt(edge)) + 2.7039516",
+    "lambda_format": "PySRFunction(X=>-log_r*(0.8247462 - 0.627011609997775*sqrt(edge)) + 2.7039516)"
+  },
+  {
+    "complexity": "11",
+    "loss": "0.004681199",
+    "equation": "2.7084694 - ((log_r * exp(0.037341055 - sqrt(edge))) / 1.2427886)",
+    "score": "0.008979898346456426",
+    "sympy_format": "-0.835256287022343*log_r*exp(-sqrt(edge)) + 2.7084694",
+    "lambda_format": "PySRFunction(X=>-0.835256287022343*log_r*exp(-sqrt(edge)) + 2.7084694)"
+  },
+  {
+    "complexity": "12",
+    "loss": "0.004413565",
+    "equation": "2.6991885 - (log_r * ((1.3240626 - sqrt(edge)) / (g020 + 1.5977831)))",
+    "score": "0.0588715207878098",
+    "sympy_format": "-log_r*(1.3240626 - sqrt(edge))/(g020 + 1.5977831) + 2.6991885",
+    "lambda_format": "PySRFunction(X=>-log_r*(1.3240626 - sqrt(edge))/(g020 + 1.5977831) + 2.6991885)"
+  },
+  {
+    "complexity": "13",
+    "loss": "0.004371573",
+    "equation": "2.696466 - ((g020 + (log_r * exp(0.047974546 - sqrt(edge)))) / 1.2208295)",
+    "score": "0.009559854337276885",
+    "sympy_format": "-0.819115199952164*g020 - 0.859369756443868*log_r*exp(-sqrt(edge)) + 2.696466",
+    "lambda_format": "PySRFunction(X=>-0.819115199952164*g020 - 0.859369756443868*log_r*exp(-sqrt(edge)) + 2.696466)"
+  },
+  {
+    "complexity": "15",
+    "loss": "0.0043665147",
+    "equation": "2.696466 - ((((edge_g040 + g020) + log_r) * exp(0.047974546 - sqrt(edge))) / 1.2208295)",
+    "score": "0.0005788795831168784",
+    "sympy_format": "-0.859369756443868*(edge_g040 + g020 + log_r)*exp(-sqrt(edge)) + 2.696466",
+    "lambda_format": "PySRFunction(X=>-0.859369756443868*(edge_g040 + g020 + log_r)*exp(-sqrt(edge)) + 2.696466)"
+  },
+  {
+    "complexity": "17",
+    "loss": "0.0043213153",
+    "equation": "2.695507 - (g020 + (log_r * (exp(((0.85015607 - edge) * 0.11638772) - sqrt(edge)) / 1.2565768)))",
+    "score": "0.005202657949465712",
+    "sympy_format": "-g020 - 0.878584251915776*log_r*exp(-sqrt(edge) - 0.11638772*edge) + 2.695507",
+    "lambda_format": "PySRFunction(X=>-g020 - 0.878584251915776*log_r*exp(-sqrt(edge) - 0.11638772*edge) + 2.695507)"
+  }
+]

@@ -1,0 +1,6 @@
+complexity,loss,equation,score,sympy_format,lambda_format
+1,196.25946,53.168564,0.0,53.1685640000000,PySRFunction(X=>53.1685640000000)
+3,98.52735,18.852495 / P_max_ratio,0.34455169235576466,18.852495/P_max_ratio,PySRFunction(X=>18.852495/P_max_ratio)
+5,27.327166,(n_active * n_active) - -42.328167,0.6412264378101448,n_active*n_active - 1*(-42.328167),PySRFunction(X=>n_active*n_active - 1*(-42.328167))
+7,23.083567,((n_active * n_active) - -41.525066) + pairwise_inv,0.0843801599494012,n_active*n_active + pairwise_inv - 1*(-41.525066),PySRFunction(X=>n_active*n_active + pairwise_inv - 1*(-41.525066))
+11,2.609565,(power_std + power_mean) * (((P_total - -15.532864) - power_std) / 1.2158687),0.5449843595785707,(power_mean + power_std)*(P_total - power_std - 1*(-15.532864))/1.2158687,PySRFunction(X=>(power_mean + power_std)*(P_total - power_std - 1*(-15.532864))/1.2158687)

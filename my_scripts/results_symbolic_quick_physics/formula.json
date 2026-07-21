@@ -1,0 +1,67 @@
+{
+  "target": "theta",
+  "formula": "delta_T = intercept + sum_j coefficient_j * feature_j",
+  "intercept": 2.511502994372581,
+  "terms": [
+    {
+      "name": "1",
+      "coefficient": 0.0
+    },
+    {
+      "name": "edge",
+      "coefficient": -0.9744898774998199
+    },
+    {
+      "name": "edge^2",
+      "coefficient": 1.722978315885488
+    },
+    {
+      "name": "sum_i w_i/(r_i+eps)",
+      "coefficient": 0.019151833415383974
+    },
+    {
+      "name": "sum_i w_i/(r_i^2+eps^2)",
+      "coefficient": -7.090505766619619e-05
+    },
+    {
+      "name": "sum_i w_i*log(r_i+eps)",
+      "coefficient": -0.7817572324348518
+    },
+    {
+      "name": "sum_i w_i*r_i",
+      "coefficient": 0.2856079972598101
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.03^2))",
+      "coefficient": -0.29354049670943616
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": -1.1119580202779424
+    },
+    {
+      "name": "sum_i w_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": 0.42419367687574056
+    },
+    {
+      "name": "edge*sum_i w_i/(r_i+eps)",
+      "coefficient": -0.14676303014379213
+    },
+    {
+      "name": "edge*sum_i w_i*exp(-r_i^2/(2*0.06^2))",
+      "coefficient": 5.7959372208140225
+    },
+    {
+      "name": "sum_i w_i*s_i*exp(-r_i^2/(2*0.10^2))",
+      "coefficient": -3.067934023326081
+    }
+  ],
+  "regressor": "RidgeCV",
+  "alpha": 0.7356422544596406,
+  "eps_norm": 0.01,
+  "feature_notes": {
+    "r_i": "normalized distance from query pixel (x,y) to component i",
+    "edge": "normalized distance from query pixel to closest board edge",
+    "s_i": "normalized distance from component i to closest board edge"
+  }
+}

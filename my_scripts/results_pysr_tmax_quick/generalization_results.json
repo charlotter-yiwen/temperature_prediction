@@ -1,0 +1,52 @@
+{
+  "6-Component (15.7W)": {
+    "label": "tmax_gen_6-Component (15.7W)",
+    "n_cases": 1,
+    "r2": NaN,
+    "mae": 3.8632965087890625,
+    "true_min": 80.9540023803711,
+    "true_max": 80.9540023803711,
+    "pred_min": 77.09070587158203,
+    "pred_max": 77.09070587158203
+  },
+  "7-Component (17.5W)": {
+    "label": "tmax_gen_7-Component (17.5W)",
+    "n_cases": 1,
+    "r2": NaN,
+    "mae": 17.87860107421875,
+    "true_min": 85.79889678955078,
+    "true_max": 85.79889678955078,
+    "pred_min": 67.92029571533203,
+    "pred_max": 67.92029571533203
+  },
+  "8-Component (20.0W)": {
+    "label": "tmax_gen_8-Component (20.0W)",
+    "n_cases": 1,
+    "r2": NaN,
+    "mae": 20.210350036621094,
+    "true_min": 93.27100372314453,
+    "true_max": 93.27100372314453,
+    "pred_min": 73.06065368652344,
+    "pred_max": 73.06065368652344
+  },
+  "9-Component (30.0W)": {
+    "label": "tmax_gen_9-Component (30.0W)",
+    "n_cases": 1,
+    "r2": NaN,
+    "mae": 67.54975891113281,
+    "true_min": 134.5164031982422,
+    "true_max": 134.5164031982422,
+    "pred_min": 202.066162109375,
+    "pred_max": 202.066162109375
+  },
+  "10-Component (32.5W)": {
+    "label": "tmax_gen_10-Component (32.5W)",
+    "n_cases": 1,
+    "r2": NaN,
+    "mae": 71.75895690917969,
+    "true_min": 135.3404998779297,
+    "true_max": 135.3404998779297,
+    "pred_min": 207.09945678710938,
+    "pred_max": 207.09945678710938
+  }
+}

@@ -1,0 +1,7 @@
+complexity,loss,equation,score,sympy_format,lambda_format
+1,0.119940564,3.2043798,0.0,3.20437980000000,PySRFunction(X=>3.20437980000000)
+3,0.118637115,pixel_edge_source_edge - -3.1700876,0.00546346990439106,pixel_edge_source_edge - 1*(-3.1700876),PySRFunction(X=>pixel_edge_source_edge - 1*(-3.1700876))
+5,0.08561689,(r_source_edge * -2.9756858) - -3.4899147,0.16309340175177944,r_source_edge*(-2.9756858) - 1*(-3.4899147),PySRFunction(X=>r_source_edge*(-2.9756858) - 1*(-3.4899147))
+7,0.061723676,((log_r + -0.68875146) * -0.4073056) - -2.761459,0.163607495873351,(log_r - 0.68875146)*(-0.4073056) - 1*(-2.761459),PySRFunction(X=>(log_r - 0.68875146)*(-0.4073056) - 1*(-2.761459))
+9,0.016394012,(((r + min_pixel_source_edge) + -0.7198526) * -1.6343858) - -2.9990463,0.6628757194078783,(min_pixel_source_edge + r - 0.7198526)*(-1.6343858) - 1*(-2.9990463),PySRFunction(X=>(min_pixel_source_edge + r - 0.7198526)*(-1.6343858) - 1*(-2.9990463))
+11,0.011235797,((((r + log_r) + -0.6050567) * -0.42635244) - -2.8107386) - pixel_edge_source_edge,0.1889056520273139,-pixel_edge_source_edge + (log_r + r - 0.6050567)*(-0.42635244) - 1*(-2.8107386),PySRFunction(X=>-pixel_edge_source_edge + (log_r + r - 0.6050567)*(-0.42635244) - 1*(-2.8107386))

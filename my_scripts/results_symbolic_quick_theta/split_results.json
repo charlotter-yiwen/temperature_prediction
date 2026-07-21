@@ -1,0 +1,20 @@
+{
+  "val": {
+    "label": "val",
+    "n_cases": 27,
+    "r2_all_pixels": 0.9986395239830017,
+    "r2_per_sample_mean": 0.8837719140229402,
+    "r2_per_sample_std": 0.07416174743811672,
+    "r2_per_sample_min": 0.670551598072052,
+    "r2_per_sample_max": 0.9696799516677856
+  },
+  "test": {
+    "label": "test",
+    "n_cases": 30,
+    "r2_all_pixels": 0.998788058757782,
+    "r2_per_sample_mean": 0.8983454902966818,
+    "r2_per_sample_std": 0.07052341660791596,
+    "r2_per_sample_min": 0.6457206010818481,
+    "r2_per_sample_max": 0.9678135514259338
+  }
+}

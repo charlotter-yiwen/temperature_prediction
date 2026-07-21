@@ -1,0 +1,42 @@
+[
+  {
+    "complexity": "1",
+    "loss": "196.25946",
+    "equation": "53.168564",
+    "score": "0.0",
+    "sympy_format": "53.1685640000000",
+    "lambda_format": "PySRFunction(X=>53.1685640000000)"
+  },
+  {
+    "complexity": "3",
+    "loss": "98.52735",
+    "equation": "18.852495 / P_max_ratio",
+    "score": "0.34455169235576466",
+    "sympy_format": "18.852495/P_max_ratio",
+    "lambda_format": "PySRFunction(X=>18.852495/P_max_ratio)"
+  },
+  {
+    "complexity": "5",
+    "loss": "27.327166",
+    "equation": "(n_active * n_active) - -42.328167",
+    "score": "0.6412264378101448",
+    "sympy_format": "n_active*n_active - 1*(-42.328167)",
+    "lambda_format": "PySRFunction(X=>n_active*n_active - 1*(-42.328167))"
+  },
+  {
+    "complexity": "7",
+    "loss": "23.083567",
+    "equation": "((n_active * n_active) - -41.525066) + pairwise_inv",
+    "score": "0.0843801599494012",
+    "sympy_format": "n_active*n_active + pairwise_inv - 1*(-41.525066)",
+    "lambda_format": "PySRFunction(X=>n_active*n_active + pairwise_inv - 1*(-41.525066))"
+  },
+  {
+    "complexity": "11",
+    "loss": "2.609565",
+    "equation": "(power_std + power_mean) * (((P_total - -15.532864) - power_std) / 1.2158687)",
+    "score": "0.5449843595785707",
+    "sympy_format": "(power_mean + power_std)*(P_total - power_std - 1*(-15.532864))/1.2158687",
+    "lambda_format": "PySRFunction(X=>(power_mean + power_std)*(P_total - power_std - 1*(-15.532864))/1.2158687)"
+  }
+]
